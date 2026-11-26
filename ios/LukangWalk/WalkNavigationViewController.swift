@@ -289,7 +289,9 @@ final class WalkNavigationViewController: UIViewController {
     private let onStop: () -> Void
     private let onRetry: () -> Void
     private let onClose: () -> Void
-    private let arrow = UIImageView()
+    private let stage = WalkStageView()
+    private let bubble = UIView()
+    private var lastMoveAt = Date.distantPast
     private let status = UILabel()
     private let guidance = UILabel()
     private let distance = UILabel()
@@ -326,11 +328,12 @@ final class WalkNavigationViewController: UIViewController {
         WalkTheme.stage(self)
         navigationController?.isModalInPresentation = true
 
+        // 版面照主畫面：提示、小嚮導踩在地面箭頭上、距離、對話框、按鈕。
         let scroll = UIScrollView()
         let stack = UIStackView()
         stack.axis = .vertical
         stack.alignment = .center
-        stack.spacing = 18
+        stack.spacing = 12
         view.addSubview(scroll)
         scroll.addSubview(stack)
         scroll.translatesAutoresizingMaskIntoConstraints = false
@@ -342,18 +345,19 @@ final class WalkNavigationViewController: UIViewController {
             scroll.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 30),
-            stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -24),
-            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
-            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
-            stack.widthAnchor.constraint(equalTo: frame.widthAnchor, constant: -48)
+            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 8),
+            stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -16),
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            stack.widthAnchor.constraint(equalTo: frame.widthAnchor, constant: -32),
+            stack.heightAnchor.constraint(greaterThanOrEqualTo: frame.heightAnchor, constant: -24)
         ])
 
-        // 跟主畫面一樣：文楷寫提示、黑體寫距離，米白字在紅磚底上。
+        // 跟主畫面一樣：文楷寫提示與台詞、黑體寫距離，米白字在紅磚底上。
         let looks: [(UILabel, UIFont, UIColor)] = [
-            (status, WalkTheme.kai(30, bold: true, style: .title1), WalkTheme.ink),
-            (guidance, WalkTheme.kai(18, style: .body), WalkTheme.soft),
-            (distance, WalkTheme.sans(30, weight: .bold, style: .title2), WalkTheme.ink),
+            (status, WalkTheme.kai(20, style: .title3), WalkTheme.soft),
+            (guidance, WalkTheme.kai(18, style: .body), WalkTheme.ink),
+            (distance, WalkTheme.sans(48, weight: .bold, style: .largeTitle), WalkTheme.ink),
             (notificationHint, WalkTheme.sans(13, weight: .regular, style: .footnote), WalkTheme.soft)
         ]
         for (label, font, color) in looks {
@@ -370,14 +374,18 @@ final class WalkNavigationViewController: UIViewController {
         distance.addGestureRecognizer(UILongPressGestureRecognizer(target: self, action: #selector(heldDistance(_:))))
         distance.accessibilityHint = "長按可切換距離顯示。"
         notificationHint.text = "目前無法傳送通知。回到 App 即可查看回程狀態。"
-        arrow.contentMode = .scaleAspectFit
-        arrow.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 84, weight: .bold)
-        arrow.tintColor = WalkTheme.gold
-        arrow.layer.shadowColor = UIColor(red: 42 / 255, green: 13 / 255, blue: 7 / 255, alpha: 1).cgColor
-        arrow.layer.shadowOpacity = 0.45
-        arrow.layer.shadowRadius = 0
-        arrow.layer.shadowOffset = CGSize(width: 0, height: 4)
-        arrow.isAccessibilityElement = false
+        // 小嚮導的話放在半透明的圓角框裡，跟主畫面的對話框一樣。
+        bubble.backgroundColor = WalkTheme.shade
+        bubble.layer.cornerRadius = 16
+        bubble.layer.cornerCurve = .continuous
+        guidance.translatesAutoresizingMaskIntoConstraints = false
+        bubble.addSubview(guidance)
+        NSLayoutConstraint.activate([
+            guidance.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 12),
+            guidance.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -12),
+            guidance.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 16),
+            guidance.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -16)
+        ])
 
         WalkTheme.dress(retry, .stageOutline, title: "重新定位", image: "location")
         retry.accessibilityIdentifier = "walkRetryReturn"
@@ -385,12 +393,18 @@ final class WalkNavigationViewController: UIViewController {
         WalkTheme.dress(action, .stageOutline)
         action.accessibilityIdentifier = "walkFinishReturn"
         action.addTarget(self, action: #selector(finish), for: .touchUpInside)
-        for item in [status, arrow, guidance, distance, notificationHint, retry, action] {
+        let spacer = UIView()
+        for item in [status, stage, distance, bubble, notificationHint, spacer, retry, action] {
             stack.addArrangedSubview(item)
         }
+        let stageWidth = stage.widthAnchor.constraint(equalTo: stack.widthAnchor)
+        stageWidth.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            arrow.widthAnchor.constraint(equalToConstant: 120),
-            arrow.heightAnchor.constraint(equalToConstant: 120),
+            stageWidth,
+            stage.widthAnchor.constraint(lessThanOrEqualToConstant: 380),
+            stage.heightAnchor.constraint(equalTo: stage.widthAnchor, multiplier: 330.0 / 400.0),
+            bubble.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor),
+            bubble.widthAnchor.constraint(lessThanOrEqualToConstant: 360),
             distance.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
             distance.widthAnchor.constraint(equalTo: stack.widthAnchor),
             action.heightAnchor.constraint(greaterThanOrEqualToConstant: 56),
@@ -431,7 +445,10 @@ final class WalkNavigationViewController: UIViewController {
             }
             let start = CLLocation(latitude: lat, longitude: lon)
             let destination = CLLocation(latitude: point.latitude, longitude: point.longitude)
-            meters = start.distance(from: destination)
+            let previous = meters
+            let current = start.distance(from: destination)
+            if let previous, abs(previous - current) >= 3 { lastMoveAt = Date() }
+            meters = current
             let toRadians = Double.pi / 180
             let a = lat * toRadians, b = point.latitude * toRadians
             let delta = (point.longitude - lon) * toRadians
@@ -495,10 +512,11 @@ final class WalkNavigationViewController: UIViewController {
         }
         action.setTitle(ended ? "完成" : "停止回程", for: .normal)
         distance.isHidden = ended
-        arrow.transform = .identity
         distance.text = "等待定位"
+        defer { styleDistance() }
         if ended {
-            arrow.image = UIImage(systemName: "checkmark.circle.fill")
+            stage.showsArrow = false
+            stage.setPose(.cheer, flip: false)
             status.text = "已抵達回程地點"
             guidance.text = "你已經回到儲存的位置。"
             return
@@ -507,13 +525,20 @@ final class WalkNavigationViewController: UIViewController {
             let directions = ["北", "東北", "東", "東南", "南", "西南", "西", "西北"]
             let direction = directions[Int((bearing + 22.5) / 45) % directions.count]
             status.text = "朝\(direction)方回程"
-            arrow.image = UIImage(systemName: "arrow.up")
-            let angle = bearing - (heading ?? 0)
-            arrow.transform = CGAffineTransform(rotationAngle: CGFloat(angle * .pi / 180))
+            // 小嚮導的動作照主畫面：在背後就往回拉、在側邊就指方向、在前方且在走就一起走，停著就指前方。
+            let angle = WalkStageView.norm180(bearing - (heading ?? 0))
+            stage.angle = angle
+            stage.heading = heading
+            stage.showsArrow = true
+            if heading != nil && abs(angle) > 120 { stage.setPose(.pull, flip: angle > 0) }
+            else if heading != nil && abs(angle) > 35 { stage.setPose(.point, flip: angle < 0) }
+            else if Date().timeIntervalSince(lastMoveAt) < 6 { stage.setPose(.walk, flip: false) }
+            else { stage.setPose(.pointup, flip: false) }
             guidance.text = heading == nil ? "上方為北，箭頭指向回程地點的方位。" : "將手機朝向箭頭所指的方向。"
             distance.text = meters >= 1000 ? String(format: "距離 %.1f 公里", meters / 1000) : "距離 \(Int(meters.rounded())) 公尺"
         } else {
-            arrow.image = UIImage(systemName: "location.magnifyingglass")
+            stage.showsArrow = false
+            stage.setPose(locationFailed || fixExpired ? .care : .idle, flip: false)
             status.text = locationFailed || fixExpired ? "暫時無法定位" : "正在取得位置"
             guidance.text = locationFailed ? errorMessage : (fixExpired ? "正在等待較準確的位置，請到空曠處再試一次。" : "取得位置後會顯示回程方向。")
         }
@@ -522,6 +547,25 @@ final class WalkNavigationViewController: UIViewController {
             UIAccessibilityCustomAction(name: preferences.hideDistance ? "顯示距離" : "隱藏距離",
                                         target: self, selector: #selector(toggleDistance))
         ]
+    }
+
+    /// 距離跟主畫面一樣：數字大字，「距離」與單位小一號；沒有數字時用文楷。
+    private func styleDistance() {
+        guard let text = distance.text else { return }
+        let whole = NSRange(location: 0, length: (text as NSString).length)
+        let styled = NSMutableAttributedString(string: text, attributes: [
+            .font: WalkTheme.sans(18, weight: .medium, style: .body), .foregroundColor: WalkTheme.soft
+        ])
+        let digits = (try? NSRegularExpression(pattern: "[0-9.]+"))?.matches(in: text, range: whole) ?? []
+        for match in digits {
+            styled.addAttributes([.font: WalkTheme.sans(48, weight: .bold, style: .largeTitle),
+                                  .foregroundColor: WalkTheme.ink], range: match.range)
+        }
+        if digits.isEmpty {
+            styled.addAttributes([.font: WalkTheme.kai(24, bold: true, style: .title2), .foregroundColor: WalkTheme.ink],
+                                 range: whole)
+        }
+        distance.attributedText = styled
     }
 
     @objc private func heldDistance(_ gesture: UILongPressGestureRecognizer) {

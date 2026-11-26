@@ -21,6 +21,7 @@
 		B10000000000000000000017 /* WalkPlaceReportMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000017 /* WalkPlaceReportMessage.swift */; };
 		B10000000000000000000018 /* WalkTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000018 /* WalkTheme.swift */; };
 		B10000000000000000000019 /* WalkPopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000019 /* WalkPopup.swift */; };
+		B1000000000000000000001A /* WalkStageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000001A /* WalkStageView.swift */; };
 		B10000000000000000000005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000005 /* Assets.xcassets */; };
 		B10000000000000000000006 /* credits.html in Web */ = {isa = PBXBuildFile; fileRef = F10000000000000000000006 /* credits.html */; };
 		B10000000000000000000007 /* index.html in Web */ = {isa = PBXBuildFile; fileRef = F10000000000000000000007 /* index.html */; };
@@ -76,6 +77,7 @@
 		F10000000000000000000017 /* WalkPlaceReportMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkPlaceReportMessage.swift; sourceTree = "<group>"; };
 		F10000000000000000000018 /* WalkTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkTheme.swift; sourceTree = "<group>"; };
 		F10000000000000000000019 /* WalkPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkPopup.swift; sourceTree = "<group>"; };
+		F1000000000000000000001A /* WalkStageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkStageView.swift; sourceTree = "<group>"; };
 		F10000000000000000000005 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F10000000000000000000006 /* credits.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = credits.html; path = Credits/credits.html; sourceTree = "<group>"; };
 		F10000000000000000000007 /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
@@ -136,6 +138,7 @@
 				F10000000000000000000017 /* WalkPlaceReportMessage.swift */,
 				F10000000000000000000018 /* WalkTheme.swift */,
 				F10000000000000000000019 /* WalkPopup.swift */,
+				F1000000000000000000001A /* WalkStageView.swift */,
 				F10000000000000000000005 /* Assets.xcassets */,
 				F10000000000000000000006 /* credits.html */,
 				F1000000000000000000000C /* Info.plist */,
@@ -269,6 +272,7 @@
 				B10000000000000000000017 /* WalkPlaceReportMessage.swift in Sources */,
 				B10000000000000000000018 /* WalkTheme.swift in Sources */,
 				B10000000000000000000019 /* WalkPopup.swift in Sources */,
+				B1000000000000000000001A /* WalkStageView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
