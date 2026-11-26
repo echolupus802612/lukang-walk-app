@@ -55,7 +55,7 @@ final class WalkJournalViewController: UITableViewController, UISearchResultsUpd
         if let id {
             nav.setViewControllers([list, list.detail(id)], animated: false)
         }
-        presenter.present(nav, animated: true)
+        presenter.presentPopup(nav)
     }
 
     private init(store: WalkJournalStore, album: WalkPhotoAlbum, addPhoto: @escaping AddPhoto) {
@@ -124,6 +124,7 @@ final class WalkJournalViewController: UITableViewController, UISearchResultsUpd
         bookmark.accessibilityLabel = favoritesOnly ? "顯示全部" : "只看收藏"
         bookmark.accessibilityIdentifier = "walkJournalFavoritesFilter"
         navigationItem.leftBarButtonItem = bookmark
+        WalkTheme.flatten(navigationItem)
         let empty: UILabel
         if readFailed { empty = WalkTheme.message("暫時無法讀取散步日誌。") }
         else if !query.isEmpty { empty = WalkTheme.message("找不到符合的地點或筆記。") }
@@ -332,7 +333,7 @@ private final class WalkJournalDetail: UITableViewController {
             let editor = WalkJournalNote(text: entry.note) { [store, id] text in
                 try store.setNote(id: id, note: text)
             }
-            present(UINavigationController(rootViewController: editor), animated: true)
+            presentPopup(UINavigationController(rootViewController: editor))
         case .favorite:
             do { try store.setFavorite(id: id, favorite: !entry.favorite) }
             catch { showError("暫時無法儲存收藏。") }
@@ -360,8 +361,8 @@ private final class WalkJournalDetail: UITableViewController {
 
     private func showError(_ text: String) {
         guard viewIfLoaded?.window != nil, presentedViewController == nil else { return }
-        let alert = UIAlertController(title: text, message: nil, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "好", style: .default))
+        let alert = WalkAlert(title: text, message: nil)
+        alert.addAction(WalkAlert.Action(title: "好", style: .default))
         present(alert, animated: true)
     }
 }
@@ -422,8 +423,8 @@ private final class WalkJournalNote: UIViewController, UITextViewDelegate {
     @objc private func save() {
         do { try saveNote(editor.text); close() }
         catch {
-            let alert = UIAlertController(title: "暫時無法儲存筆記。", message: nil, preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "好", style: .default))
+            let alert = WalkAlert(title: "暫時無法儲存筆記。", message: nil)
+            alert.addAction(WalkAlert.Action(title: "好", style: .default))
             present(alert, animated: true)
         }
     }

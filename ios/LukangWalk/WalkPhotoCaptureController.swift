@@ -63,8 +63,8 @@ final class WalkPhotoCaptureController: UIViewController, PHPickerViewController
         navigationItem.leftBarButtonItem = UIBarButtonItem(title: "取消", style: .plain, target: self, action: #selector(close))
         message.text = "選一張照片，製作這一站的小嚮導透卡。"
         message.font = WalkTheme.kai(19, style: .body)
-        message.textColor = WalkTheme.soft
-        spinner.color = WalkTheme.ink
+        message.textColor = WalkTheme.cardSoft
+        spinner.color = WalkTheme.accent
         message.adjustsFontForContentSizeCategory = true
         message.textAlignment = .center
         message.numberOfLines = 0

@@ -32,7 +32,7 @@ final class WalkPhotoAlbum {
             let detail = WalkPhotoDetail(files: Self.files, visitID: id)
             navigation.setViewControllers([list, detail], animated: false)
         }
-        presenter.present(navigation, animated: true)
+        presenter.presentPopup(navigation)
     }
 }
 
@@ -265,7 +265,7 @@ private final class WalkPhotoDetail: UIViewController {
         caption.textAlignment = .center
         caption.numberOfLines = 0
         caption.font = WalkTheme.sans(15, weight: .medium, style: .subheadline)
-        caption.textColor = WalkTheme.soft
+        caption.textColor = WalkTheme.cardSoft
         caption.adjustsFontForContentSizeCategory = true
         WalkTheme.dress(shareButton, .main, title: "分享透卡")
         shareButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 56).isActive = true
@@ -340,8 +340,8 @@ private final class WalkPhotoDetail: UIViewController {
                 }
                 present(sheet, animated: true)
             } catch {
-                let alert = UIAlertController(title: "暫時無法分享這張透卡", message: nil, preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "好", style: .default))
+                let alert = WalkAlert(title: "暫時無法分享這張透卡", message: nil)
+                alert.addAction(WalkAlert.Action(title: "好", style: .default))
                 present(alert, animated: true)
             }
         }

@@ -142,9 +142,9 @@ final class WalkNavigationSettingsViewController: UITableViewController, CLLocat
         switch rows(in: indexPath.section)[indexPath.row] {
         case .capture: capturePoint()
         case .clear:
-            let alert = UIAlertController(title: "清除回程地點？", message: nil, preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-            alert.addAction(UIAlertAction(title: "清除", style: .destructive) { [weak self] _ in
+            let alert = WalkAlert(title: "清除回程地點？", message: nil)
+            alert.addAction(WalkAlert.Action(title: "取消", style: .cancel))
+            alert.addAction(WalkAlert.Action(title: "清除", style: .destructive) { [weak self] _ in
                 guard let self else { return }
                 stopLocating()
                 do {
@@ -186,8 +186,8 @@ final class WalkNavigationSettingsViewController: UITableViewController, CLLocat
     }
 
     private func showSaveError() {
-        let alert = UIAlertController(title: "無法儲存導航設定", message: "請再試一次。", preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "好", style: .default))
+        let alert = WalkAlert(title: "無法儲存導航設定", message: "請再試一次。")
+        alert.addAction(WalkAlert.Action(title: "好", style: .default))
         present(alert, animated: true)
     }
 
@@ -323,7 +323,7 @@ final class WalkNavigationViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        WalkTheme.paint(view)
+        WalkTheme.stage(self)
         navigationController?.isModalInPresentation = true
 
         let scroll = UIScrollView()
@@ -379,10 +379,10 @@ final class WalkNavigationViewController: UIViewController {
         arrow.layer.shadowOffset = CGSize(width: 0, height: 4)
         arrow.isAccessibilityElement = false
 
-        WalkTheme.dress(retry, .outline, title: "重新定位", image: "location")
+        WalkTheme.dress(retry, .stageOutline, title: "重新定位", image: "location")
         retry.accessibilityIdentifier = "walkRetryReturn"
         retry.addTarget(self, action: #selector(retryLocation), for: .touchUpInside)
-        WalkTheme.dress(action, .outline)
+        WalkTheme.dress(action, .stageOutline)
         action.accessibilityIdentifier = "walkFinishReturn"
         action.addTarget(self, action: #selector(finish), for: .touchUpInside)
         for item in [status, arrow, guidance, distance, notificationHint, retry, action] {
@@ -490,7 +490,7 @@ final class WalkNavigationViewController: UIViewController {
         notificationHint.isHidden = !notifyUnavailable || ended
         if ended != (action.tag == 1) {
             // 回到原地後，「完成」換成主畫面那顆金色主按鈕。
-            WalkTheme.dress(action, ended ? .main : .outline)
+            WalkTheme.dress(action, ended ? .stageMain : .stageOutline)
             action.tag = ended ? 1 : 0
         }
         action.setTitle(ended ? "完成" : "停止回程", for: .normal)
@@ -536,8 +536,8 @@ final class WalkNavigationViewController: UIViewController {
             UIAccessibility.post(notification: .announcement, argument: distance.text)
             return true
         } catch {
-            let alert = UIAlertController(title: "無法儲存距離設定", message: "請再試一次。", preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "好", style: .default))
+            let alert = WalkAlert(title: "無法儲存距離設定", message: "請再試一次。")
+            alert.addAction(WalkAlert.Action(title: "好", style: .default))
             present(alert, animated: true)
             return false
         }

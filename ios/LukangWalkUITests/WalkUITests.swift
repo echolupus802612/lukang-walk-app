@@ -349,7 +349,7 @@ final class WalkUITests: XCTestCase {
         let discard = app.buttons["walkReportDiscard"]
         if !discard.isHittable { app.swipeUp() }
         discard.tap()
-        app.alerts.buttons["清除"].tap()
+        app.buttons["清除"].tap()
         XCTAssertFalse(prepare.isEnabled)
         close.tap()
     }
@@ -514,7 +514,7 @@ final class WalkUITests: XCTestCase {
 
         startGPSWalk(app, at: start)
         game.buttons["帶我回去"].tap()
-        let confirm = app.alerts.buttons["結束散步並回程"]
+        let confirm = app.buttons["結束散步並回程"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
         XCTAssertTrue(app.navigationBars["帶我回去"].waitForExistence(timeout: 10), "選擇結束散步後應開啟回程導航")
@@ -586,7 +586,7 @@ final class WalkUITests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 6))
         XCTAssertEqual(toggle.value as? String, "0", "回程長按顯示距離的選擇應保存")
         settings.cells["walkClearReturnPoint"].tap()
-        app.alerts.buttons["清除"].tap()
+        app.buttons["清除"].tap()
         XCTAssertTrue(settings.staticTexts["尚未設定回程地點"].waitForExistence(timeout: 5))
         settings.cells["walkArrivalRadius0"].tap()
         app.navigationBars["導航設定"].buttons["完成"].tap()

@@ -57,7 +57,7 @@ final class WalkPlaceReportViewController: UIViewController, UITextViewDelegate,
         place.accessibilityIdentifier = "walkReportPlace"
         stack.addArrangedSubview(place)
         let recipient = label("收件人　\(WalkPlaceReportMessage.recipient)",
-                              font: WalkTheme.sans(14, weight: .regular, style: .subheadline), color: WalkTheme.soft)
+                              font: WalkTheme.sans(14, weight: .regular, style: .subheadline), color: WalkTheme.cardSoft)
         recipient.accessibilityIdentifier = "walkReportRecipient"
         stack.addArrangedSubview(recipient)
         stack.setCustomSpacing(20, after: recipient)
@@ -82,7 +82,7 @@ final class WalkPlaceReportViewController: UIViewController, UITextViewDelegate,
         stack.addArrangedSubview(label("補充說明", font: WalkTheme.kai(18, bold: true, style: .headline)))
         note.font = WalkTheme.kai(18, style: .body)
         note.adjustsFontForContentSizeCategory = true
-        note.backgroundColor = WalkTheme.card
+        note.backgroundColor = WalkTheme.well
         note.textColor = WalkTheme.cardInk
         note.tintColor = WalkTheme.accent
         note.layer.cornerRadius = 14
@@ -99,7 +99,7 @@ final class WalkPlaceReportViewController: UIViewController, UITextViewDelegate,
         note.inputAccessoryView = toolbar
         stack.addArrangedSubview(note)
         let hint = label("選擇「其他」時請填寫原因。寄送前可以在郵件裡確認內容。",
-                         font: WalkTheme.sans(13, weight: .regular, style: .footnote), color: WalkTheme.soft)
+                         font: WalkTheme.sans(13, weight: .regular, style: .footnote), color: WalkTheme.cardSoft)
         stack.addArrangedSubview(hint)
         stack.setCustomSpacing(18, after: hint)
 
@@ -110,7 +110,7 @@ final class WalkPlaceReportViewController: UIViewController, UITextViewDelegate,
         configure(discard, title: "清除這份草稿", id: "walkReportDiscard", style: .danger, action: #selector(confirmDiscard))
         stack.setCustomSpacing(16, after: compose)
         status.font = WalkTheme.kai(17, style: .body)
-        status.textColor = WalkTheme.ink
+        status.textColor = WalkTheme.cardInk
         status.textAlignment = .center
         status.adjustsFontForContentSizeCategory = true
         status.numberOfLines = 0
@@ -124,7 +124,7 @@ final class WalkPlaceReportViewController: UIViewController, UITextViewDelegate,
         refresh()
     }
 
-    private func label(_ text: String, font: UIFont, color: UIColor = WalkTheme.ink) -> UILabel {
+    private func label(_ text: String, font: UIFont, color: UIColor = WalkTheme.cardInk) -> UILabel {
         let label = UILabel()
         label.text = text
         label.font = font
@@ -152,9 +152,9 @@ final class WalkPlaceReportViewController: UIViewController, UITextViewDelegate,
             let button = reasonButtons[index]
             let selected = reason == selectedReason
             button.configuration?.image = UIImage(systemName: selected ? "checkmark.circle.fill" : "circle")
-            // 選到的原因跟網頁的已選按鈕一樣：米白底、紅磚字。
-            button.configuration?.baseForegroundColor = selected ? WalkTheme.brickDeep : WalkTheme.ink
-            button.configuration?.background.backgroundColor = selected ? WalkTheme.ink : WalkTheme.shade
+            // 選到的原因填滿紅磚色，沒選的是框線，跟網頁的已選按鈕一樣。
+            button.configuration?.baseForegroundColor = selected ? WalkTheme.accentInk : WalkTheme.accent
+            button.configuration?.background.backgroundColor = selected ? WalkTheme.accent : .clear
             if selected { button.accessibilityTraits.insert(.selected) }
             else { button.accessibilityTraits.remove(.selected) }
         }
@@ -193,9 +193,9 @@ final class WalkPlaceReportViewController: UIViewController, UITextViewDelegate,
 
     @objc private func confirmDiscard() {
         finishEditing()
-        let alert = UIAlertController(title: "清除這份草稿？", message: nil, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "保留", style: .cancel))
-        alert.addAction(UIAlertAction(title: "清除", style: .destructive) { [weak self] _ in
+        let alert = WalkAlert(title: "清除這份草稿？", message: nil)
+        alert.addAction(WalkAlert.Action(title: "保留", style: .cancel))
+        alert.addAction(WalkAlert.Action(title: "清除", style: .destructive) { [weak self] _ in
             self?.clearDraft()
             self?.showStatus("已清除這份草稿。")
         })

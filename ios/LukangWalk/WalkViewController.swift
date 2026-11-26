@@ -383,7 +383,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         let screen = WalkNavigationSettingsViewController(preferences: preferences,
                                                           onChanged: { [weak self] in self?.sendNavigationPreferences() },
                                                           onStartReturn: afterSetup)
-        present(UINavigationController(rootViewController: screen), animated: true)
+        presentPopup(UINavigationController(rootViewController: screen))
     }
 
     private func requestReturn() {
@@ -393,16 +393,16 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         let permission = manager.authorizationStatus
         if permission == .denied || permission == .restricted ||
             (permission != .notDetermined && manager.accuracyAuthorization != .fullAccuracy) {
-            let alert = UIAlertController(title: "回程需要準確位置",
-                                          message: "請在 iPhone 設定允許《散步吧》使用定位，並開啟準確位置。", preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "好", style: .default))
+            let alert = WalkAlert(title: "回程需要準確位置",
+                                  message: "請在 iPhone 設定允許《散步吧》使用定位，並開啟準確位置。")
+            alert.addAction(WalkAlert.Action(title: "好", style: .default))
             present(alert, animated: true)
             return
         }
         guard let trip = activeTrip else { presentReturn(point: point); return }
-        let alert = UIAlertController(title: "現在回程？", message: "這趟散步會收工。照片和筆記會留在日誌裡。", preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "繼續散步", style: .cancel))
-        alert.addAction(UIAlertAction(title: "結束散步並回程", style: .default) { [weak self, weak alert] _ in
+        let alert = WalkAlert(title: "現在回程？", message: "這趟散步會收工。照片和筆記會留在日誌裡。")
+        alert.addAction(WalkAlert.Action(title: "繼續散步", style: .cancel))
+        alert.addAction(WalkAlert.Action(title: "結束散步並回程", style: .default) { [weak self, weak alert] _ in
             guard let self else { return }
             let start = {
                 guard self.canPresentWalk, self.presentedViewController == nil else { return }
@@ -430,6 +430,9 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         returnScreen = screen
         let nav = UINavigationController(rootViewController: screen)
         nav.isModalInPresentation = true
+        // 回程畫面像主畫面一樣是整頁紅磚，不用彈窗卡片。
+        nav.modalPresentationStyle = .fullScreen
+        nav.modalTransitionStyle = .crossDissolve
         present(nav, animated: true)
         if alreadyArrived {
             screen.loadViewIfNeeded()
@@ -564,7 +567,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
                       let entry = try journal.entry(id: visitID), entry.status == .arrived,
                       !entry.isSimulated, entry.placeID == placeID else { return }
                 let report = WalkPlaceReportViewController(placeID: entry.placeID, placeName: entry.name)
-                present(UINavigationController(rootViewController: report), animated: true)
+                presentPopup(UINavigationController(rootViewController: report))
             } catch {
                 send(["type": "storeError"])
             }
@@ -581,8 +584,8 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
                     [weak self] presenter, id in self?.takeJournalPhoto(from: presenter, id: id)
                 }
             } catch {
-                let alert = UIAlertController(title: "暫時無法讀取散步日誌", message: "請再開啟一次日誌。", preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "好", style: .default))
+                let alert = WalkAlert(title: "暫時無法讀取散步日誌", message: "請再開啟一次日誌。")
+                alert.addAction(WalkAlert.Action(title: "好", style: .default))
                 if presentedViewController == nil { present(alert, animated: true) }
             }
         }
@@ -605,7 +608,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
                                                       photo: photo, arguments: ["snapshot": snapshot])
             try await self.album.save(visit: visit, photo: photo, card: card)
         }, onSaved: { NotificationCenter.default.post(name: .walkJournalDidChange, object: nil) })
-        presenter.present(UINavigationController(rootViewController: capture), animated: true)
+        presenter.presentPopup(UINavigationController(rootViewController: capture))
     }
 
     private func renderPhotoCard(_ script: String, photo: Data, arguments: [String: Any]) async throws -> Data {
@@ -646,7 +649,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
             NotificationCenter.default.post(name: .walkJournalDidChange, object: nil)
             self.album.present(from: self, showing: visit.id)
         })
-        present(UINavigationController(rootViewController: capture), animated: true)
+        presentPopup(UINavigationController(rootViewController: capture))
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
@@ -692,7 +695,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         guard presentedViewController == nil,
               let page = Bundle.main.url(forResource: "credits", withExtension: "html", subdirectory: "Web")
         else { return }
-        present(UINavigationController(rootViewController: CreditsViewController(page: page)), animated: true)
+        presentPopup(UINavigationController(rootViewController: CreditsViewController(page: page)))
     }
 }
 
