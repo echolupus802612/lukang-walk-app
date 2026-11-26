@@ -36,20 +36,18 @@ final class WalkUITests: XCTestCase {
     }
 
     @MainActor
-    private func setNantouLocation(latitude: Double) {
-        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: 120.79928)
+    private func setLocation(_ coordinate: CLLocationCoordinate2D) {
         XCUIDevice.shared.location = XCUILocation(location: CLLocation(coordinate: coordinate, altitude: 0,
             horizontalAccuracy: 5, verticalAccuracy: 5, timestamp: Date()))
     }
 
     @MainActor
-    private func startGPSWalk(_ app: XCUIApplication) {
+    private func startGPSWalk(_ app: XCUIApplication, at coordinate: CLLocationCoordinate2D) {
         let game = app.webViews.firstMatch
         let start = game.buttons["出門散步吧"]
         XCTAssertTrue(start.waitForExistence(timeout: 20))
         selectNear(in: game)
-        // 仙洞坪棋盤石（編號 1001）以北約 222 公尺，近距離選項內只有這一站。
-        setNantouLocation(latitude: 23.90365)
+        setLocation(coordinate)
         start.tap()
 
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -57,7 +55,7 @@ final class WalkUITests: XCTestCase {
             format: "label IN %@", ["Allow While Using App", "Allow While Using the App", "使用 App 期間允許", "使用 App 時允許"]
         )).firstMatch
         if permission.waitForExistence(timeout: 2) { permission.tap() }
-        setNantouLocation(latitude: 23.90365)
+        setLocation(coordinate)
         let allowNotifications = springboard.alerts.buttons.matching(NSPredicate(
             format: "label IN %@", ["Allow", "允許"]
         )).firstMatch
@@ -73,10 +71,12 @@ final class WalkUITests: XCTestCase {
     func testGPSWalkUsesSimulatedCoreLocation() {
         let previousLocation = XCUIDevice.shared.location
         defer { XCUIDevice.shared.location = previousLocation }
-        setNantouLocation(latitude: 23.90365)
+        // 鹿港天后宮周邊有多個近距離地點，與背景測試造訪的南投景點分開。
+        let start = CLLocationCoordinate2D(latitude: 24.059446, longitude: 120.431209)
+        setLocation(start)
         let app = XCUIApplication()
         app.launch()
-        startGPSWalk(app)
+        startGPSWalk(app, at: start)
         let game = app.webViews.firstMatch
         game.buttons["收工"].tap()
         XCTAssertTrue(game.staticTexts["已收工"].waitForExistence(timeout: 5))
@@ -87,7 +87,9 @@ final class WalkUITests: XCTestCase {
         let device = XCUIDevice.shared
         let previousLocation = device.location
         defer { device.location = previousLocation }
-        setNantouLocation(latitude: 23.90365)
+        // 仙洞坪棋盤石（編號 1001）以北約 222 公尺，近距離選項內只有這一站。
+        let start = CLLocationCoordinate2D(latitude: 23.90365, longitude: 120.79928)
+        setLocation(start)
         let app = XCUIApplication()
         app.launch()
         let game = app.webViews.firstMatch
@@ -95,17 +97,17 @@ final class WalkUITests: XCTestCase {
         XCTAssertTrue(status.waitForExistence(timeout: 20))
         let before = status.label.split(separator: " ").compactMap { Int($0) }
         XCTAssertEqual(before.count, 2)
-        startGPSWalk(app)
+        startGPSWalk(app, at: start)
 
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         device.press(.home)
         XCTAssertTrue(app.wait(for: .runningBackground, timeout: 8), "按下主畫面後應在背景接收定位")
-        setNantouLocation(latitude: 23.90179)
+        setLocation(.init(latitude: 23.90179, longitude: start.longitude))
         Thread.sleep(forTimeInterval: 1.2)
-        setNantouLocation(latitude: 23.90160)
+        setLocation(.init(latitude: 23.90160, longitude: start.longitude))
         // 只操作模擬器定位與 SpringBoard，讓 App 在背景確認抵達。
         Thread.sleep(forTimeInterval: 2)
-        setNantouLocation(latitude: 23.90565)
+        setLocation(.init(latitude: 23.90565, longitude: start.longitude))
         XCTAssertNotEqual(app.state, .runningForeground)
         let notification = springboard.descendants(matching: .any).matching(NSPredicate(
             format: "label CONTAINS %@ OR label CONTAINS %@", "散步到站了", "小嚮導已經找到目的地"
