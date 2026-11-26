@@ -19,6 +19,13 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
     private let location = WalkLocation()
     private let progress = WalkProgress()
     private let album = WalkPhotoAlbum()
+    private let journal = WalkJournalStore()
+    private var activeTrip: (id: String, session: Int?)?
+    private var tripWentIntoBackground = false
+    private var previousVisits: (real: [Int], simulated: [Int]) = ([], [])
+    private var previousReceipt: WalkProgress.Arrival?
+    private var journalPreparation: Task<Void, Error>?
+    private var journalPrepared = false
     private static let photoScript: String = {
         var sprites: [String: String] = [:]
         for name in ["cheer", "idle"] {
@@ -60,8 +67,16 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        previousVisits = progress.visitedPlaces
+        previousReceipt = progress.pendingArrival
+        do { try journal.interruptWalking(except: previousReceipt?.token) }
+        catch { deferredLocationError = ["type": "storeError"] }
         location.onEvent = { [weak self] event in
             guard let self else { return }
+            if event["type"] as? String == "error", let session = event["session"] as? Int,
+               let trip = self.activeTrip, trip.session == session {
+                self.endTrip(id: trip.id, status: .interrupted)
+            }
             if self.foreground && self.pageReady {
                 self.send(event)
             } else if event["type"] as? String == "error" {
@@ -90,7 +105,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         }
         let scripts = web.configuration.userContentController
         scripts.removeAllUserScripts()
-        scripts.addUserScript(WKUserScript(source: progress.initialScript + Self.photoScript,
+        scripts.addUserScript(WKUserScript(source: progress.initialScript + Self.photoScript + "window.lukangWalkJournal = true;",
                                            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         var entry = index
         #if DEBUG
@@ -108,6 +123,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         location.setForeground(active)
         UIApplication.shared.isIdleTimerDisabled = awake && active
         if !active {
+            if activeTrip?.session != nil { tripWentIntoBackground = true }
             haptics?.stop(completionHandler: nil)
             haptics = nil
         } else {
@@ -124,7 +140,9 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         if let arrival = progress.arrivalEvent {
             send(arrival)
         } else if let walk = location.activeTarget {
-            send(["type": "resumeWalk", "session": walk.session, "placeID": walk.placeID])
+            var event: [String: Any] = ["type": "resumeWalk", "session": walk.session, "placeID": walk.placeID]
+            if let trip = activeTrip, walk.session == trip.session { event["id"] = trip.id }
+            send(event)
             requestArrivalAlerts(for: walk.session)
         } else if let error = deferredLocationError {
             deferredLocationError = nil
@@ -154,9 +172,14 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
     private func finishWalk(session: Int, placeID: Int, inBackground: Bool) {
         awake = false
         UIApplication.shared.isIdleTimerDisabled = false
-        do { try progress.recordArrival(placeID: placeID, session: session) }
+        let visitID = activeTrip.flatMap { $0.session == session ? $0.id : nil } ?? UUID().uuidString
+        do {
+            try progress.recordArrival(placeID: placeID, session: session, visitID: visitID,
+                                       distanceIncomplete: inBackground || tripWentIntoBackground)
+        }
         catch { if foreground && pageReady { send(["type": "storeError"]) } }
         guard let arrival = progress.pendingArrival else { return }
+        endTrip(id: arrival.token, status: .arrived, date: arrival.date, stop: progress.visitedPlaces.real.count)
         if inBackground || view.window?.windowScene?.activationState != .foregroundActive {
             postArrivalNotification(arrival.token)
         } else {
@@ -201,6 +224,12 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         case "ready":
             pageReady = true
             restorePage()
+            Task {
+                do {
+                    try await prepareJournal()
+                    if progress.pendingArrival != nil { restorePage() }
+                } catch { send(["type": "storeError"]) }
+            }
         case "start":
             guard progress.pendingArrival == nil else { restorePage(); return }
             if let session = body["session"] as? Int, session > 0 {
@@ -212,10 +241,38 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
             guard let session = body["session"] as? Int, let placeID = body["placeID"] as? Int,
                   let latitude = body["latitude"] as? Double, let longitude = body["longitude"] as? Double else { return }
             location.setTarget(session: session, placeID: placeID, latitude: latitude, longitude: longitude)
-            if location.activeTarget?.session == session { requestArrivalAlerts(for: session) }
+            if let target = location.activeTarget, target.session == session, target.placeID == placeID {
+                beginTrip(body, session: session)
+                requestArrivalAlerts(for: session)
+            }
+        case "journalBegin":
+            if body["isSimulated"] as? Bool == true { beginTrip(body, session: nil) }
+        case "journalFinish":
+            guard let id = body["id"] as? String, activeTrip?.id == id,
+                  let value = body["status"] as? String, let status = WalkJournalStore.Status(rawValue: value),
+                  status == .stopped || status == .interrupted || (status == .arrived && activeTrip?.session == nil) else { return }
+            endTrip(id: id, status: status, stop: body["stop"] as? Int, walked: body["walked"] as? Double)
+        case "journal":
+            openJournal(showing: body["id"] as? String)
         case "arrivalShown":
             guard canPresentWalk, let token = body["token"] as? String, progress.pendingArrival?.token == token else { return }
-            do { try progress.acknowledgeArrival(token) } catch { send(["type": "storeError"]) }
+            do {
+                guard journalPrepared else { return }
+                guard let entry = try journal.entry(id: token) else {
+                    previousReceipt = progress.pendingArrival
+                    journalPrepared = false
+                    Task {
+                        do { try await prepareJournal(); restorePage() }
+                        catch { send(["type": "storeError"]) }
+                    }
+                    return
+                }
+                if entry.status != .arrived {
+                    try journal.finish(id: token, status: .arrived, date: progress.pendingArrival?.date,
+                                       stop: progress.visitedPlaces.real.count)
+                }
+                try progress.acknowledgeArrival(token)
+            } catch { send(["type": "storeError"]); return }
             UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [token])
         case "stop":
             if let session = body["session"] as? Int { location.stop(session) }
@@ -252,6 +309,115 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
                                 arguments: ["event": event], in: nil, in: .page, completionHandler: nil)
     }
 
+    private func beginTrip(_ body: [String: Any], session: Int?) {
+        guard let id = body["id"] as? String, UUID(uuidString: id) != nil,
+              let placeID = body["placeID"] as? Int, placeID > 0,
+              let name = body["name"] as? String, !name.isEmpty else { return }
+        if activeTrip?.id != id {
+            if let previous = activeTrip { endTrip(id: previous.id, status: .interrupted) }
+            tripWentIntoBackground = !foreground
+        }
+        activeTrip = (id, session)
+        do {
+            try journal.begin(id: id, placeID: placeID, name: name, isSimulated: session == nil,
+                              latitude: body["latitude"] as? Double, longitude: body["longitude"] as? Double)
+        } catch { send(["type": "storeError"]) }
+    }
+
+    private func endTrip(id: String, status: WalkJournalStore.Status, date: String? = nil,
+                         stop: Int? = nil, walked: Double? = nil) {
+        do { try journal.finish(id: id, status: status, date: date, stop: stop, walked: walked) }
+        catch { send(["type": "storeError"]) }
+        if activeTrip?.id == id { activeTrip = nil }
+    }
+
+    private func prepareJournal() async throws {
+        if journalPrepared { return }
+        if let journalPreparation { try await journalPreparation.value; return }
+        let task = Task { try await self.importPreviousWalks() }
+        journalPreparation = task
+        defer { journalPreparation = nil }
+        try await task.value
+        journalPrepared = true
+    }
+
+    private func importPreviousWalks() async throws {
+        let pending = previousReceipt
+        guard journal.needsMigration || pending != nil else { return }
+        let photos = journal.needsMigration ? try await album.savedVisits() : []
+        var ids = Set(photos.map { $0.placeID })
+        if journal.needsMigration { ids.formUnion(previousVisits.real); ids.formUnion(previousVisits.simulated) }
+        if let pending { ids.insert(pending.placeID) }
+        var places: [Int: WalkJournalStore.Place] = [:]
+        if !ids.isEmpty {
+            let result = try await web.callAsyncJavaScript("return window.lukangJournalPlaces(ids);",
+                                                           arguments: ["ids": Array(ids)], in: nil, contentWorld: .page)
+            guard let rows = result as? [[String: Any]] else { throw CocoaError(.fileReadCorruptFile) }
+            for row in rows {
+                guard let id = row["placeID"] as? Int, let name = row["name"] as? String else { continue }
+                places[id] = WalkJournalStore.Place(name: name, latitude: row["latitude"] as? Double,
+                                                    longitude: row["longitude"] as? Double)
+            }
+        }
+        if let pending {
+            let place = places[pending.placeID]
+            try journal.recoverArrival(id: pending.token, placeID: pending.placeID,
+                                       name: place?.name ?? "先前到訪的地點", isSimulated: false,
+                                       date: pending.date, latitude: place?.latitude, longitude: place?.longitude)
+        }
+        if journal.needsMigration {
+            try journal.migrate(photoVisits: photos, seen: previousVisits.real, simSeen: previousVisits.simulated,
+                                place: { places[$0] })
+        }
+        previousReceipt = nil
+    }
+
+    private func openJournal(showing id: String?) {
+        guard canPresentWalk, presentedViewController == nil else { return }
+        Task {
+            do {
+                try await prepareJournal()
+                guard canPresentWalk, presentedViewController == nil else { return }
+                WalkJournalViewController.present(from: self, store: journal, album: album, showing: id) {
+                    [weak self] presenter, id in self?.takeJournalPhoto(from: presenter, id: id)
+                }
+            } catch {
+                let alert = UIAlertController(title: "暫時無法讀取散步日誌", message: "請再開啟一次日誌。", preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "好", style: .default))
+                if presentedViewController == nil { present(alert, animated: true) }
+            }
+        }
+    }
+
+    private func takeJournalPhoto(from presenter: UIViewController, id: String) {
+        guard presenter.presentedViewController == nil, let entry = try? journal.entry(id: id),
+              entry.status != .legacy else { return }
+        // 途中、中斷與收工的行程都不會從相機標題或透卡透露未揭曉的地點。
+        let title = entry.status == .arrived ? entry.name : "散步途中"
+        let visit = WalkPhotoAlbum.Visit(id: UUID().uuidString, placeID: entry.placeID, name: title,
+                                         date: entry.date, isSimulated: entry.isSimulated, tripID: entry.id)
+        var snapshot: [String: Any] = ["id": id, "status": entry.status.rawValue, "name": title,
+                                       "date": entry.date, "placeID": entry.placeID]
+        if let stop = entry.stop { snapshot["stop"] = stop }
+        if let walked = entry.walked { snapshot["walked"] = walked }
+        let capture = WalkPhotoCaptureController(place: title, save: { [weak self] photo in
+            guard let self else { throw CocoaError(.userCancelled) }
+            let card = try await self.renderPhotoCard("return await window.lukangRenderJournalCard(photo, snapshot);",
+                                                      photo: photo, arguments: ["snapshot": snapshot])
+            try await self.album.save(visit: visit, photo: photo, card: card)
+        }, onSaved: { NotificationCenter.default.post(name: .walkJournalDidChange, object: nil) })
+        presenter.present(UINavigationController(rootViewController: capture), animated: true)
+    }
+
+    private func renderPhotoCard(_ script: String, photo: Data, arguments: [String: Any]) async throws -> Data {
+        var fields = arguments
+        fields["photo"] = photo.base64EncodedString()
+        let result = try await web.callAsyncJavaScript(script, arguments: fields, in: nil, contentWorld: .page)
+        guard let base64 = result as? String, let card = Data(base64Encoded: base64),
+              card.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) else { throw CocoaError(.fileReadCorruptFile) }
+        return card
+    }
+
     private func takeWalkPhoto(_ fields: [String: Any]) {
         guard canPresentWalk, presentedViewController == nil,
               let id = fields["id"] as? String, UUID(uuidString: id) != nil,
@@ -263,7 +429,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         let capture = WalkPhotoCaptureController(place: name, save: { [weak self] photo in
             guard let self else { throw CocoaError(.userCancelled) }
             // 相機開啟時，系統可能回收下方的網頁。只有重載後才使用按下拍照時保留的到站資料。
-            var arguments: [String: Any] = ["photo": photo.base64EncodedString(), "visitID": id, "recovered": NSNull()]
+            var arguments: [String: Any] = ["visitID": id, "recovered": NSNull()]
             if self.pageGeneration != originalPage {
                 for _ in 0..<30 {
                     if self.pageReady { break }
@@ -272,14 +438,12 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
                 guard self.pageReady else { throw CocoaError(.fileReadUnknown) }
                 arguments["recovered"] = fields
             }
-            let result = try await self.web.callAsyncJavaScript(
-                "return await window.lukangRenderWalkCard(photo, visitID, recovered);",
-                arguments: arguments, in: nil, contentWorld: .page)
-            guard let base64 = result as? String, let card = Data(base64Encoded: base64),
-                  card.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) else { throw CocoaError(.fileReadCorruptFile) }
+            let card = try await self.renderPhotoCard("return await window.lukangRenderWalkCard(photo, visitID, recovered);",
+                                                      photo: photo, arguments: arguments)
             try await self.album.save(visit: visit, photo: photo, card: card)
         }, onSaved: { [weak self] in
             guard let self else { return }
+            NotificationCenter.default.post(name: .walkJournalDidChange, object: nil)
             self.album.present(from: self, showing: id)
         })
         present(UINavigationController(rootViewController: capture), animated: true)
@@ -292,6 +456,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        if let trip = activeTrip, trip.session == nil { endTrip(id: trip.id, status: .interrupted) }
         if location.activeTarget == nil { location.end() }
         awake = false
         UIApplication.shared.isIdleTimerDisabled = false

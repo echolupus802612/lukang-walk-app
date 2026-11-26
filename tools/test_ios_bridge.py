@@ -114,6 +114,167 @@ class WalkBridgeTests(unittest.TestCase):
         self.page.add_init_script("window.lukangWalkPhotos=true; window.lukangCardSprites=" + json.dumps(sprites))
         self.enable_background_walk()
 
+    def enable_journal(self):
+        self.page.add_init_script("window.lukangWalkJournal=true;")
+        self.enable_walk_photos()
+
+    def test_real_journal_reuses_trip_on_redraw_and_finishes_on_stop(self):
+        self.enable_journal()
+        self.assertEqual(self.label("#photoAlbum"), "散步日誌")
+        self.click("#photoAlbum")
+        self.assertEqual(self.messages("journal"), [{"action": "journal"}])
+        self.assertFalse(self.page.locator("#journalNote").is_visible())
+        places = self.page.evaluate("ids=>lukangJournalPlaces(ids)", [PLACE["id"], PLACE["id"], -1, 9999999])
+        self.assertEqual(places, [{"placeID": PLACE["id"], "name": PLACE["name"],
+                                   "latitude": PLACE["lat"], "longitude": PLACE["lng"]}])
+        session = self.start()
+        self.assertEqual(self.messages("target"), [])
+        self.fix(session, ORIGIN, age=900)
+        first = self.messages("target")[0]
+        trip = first["id"]
+        self.assertEqual(UUID(trip).version, 4)
+        self.assertEqual((first["name"], first["placeID"], first["isSimulated"]), (PLACE["name"], PLACE["id"], False))
+        self.assertEqual(self.messages("journalBegin"), [])
+        self.assertNotIn(first["name"], self.label("body"))
+        self.click("#journalNote")
+        self.assertEqual(self.messages("journal")[-1], {"action":"journal", "id":trip})
+        self.fix(session, (ORIGIN[0]+0.0001, ORIGIN[1]), age=700)
+        self.click("#redraw")
+        second = self.messages("target")[-1]
+        self.assertEqual(second["id"], trip)
+        self.assertNotEqual(second["placeID"], first["placeID"])
+        self.fix(session, (ORIGIN[0]+0.0002, ORIGIN[1]), age=400)
+        self.click("#stop")
+        finished, = self.messages("journalFinish")
+        self.assertEqual((finished["id"],finished["status"],finished["stop"]), (trip,"stopped",None))
+        self.assertGreater(finished["walked"], 20)
+        session = self.start()
+        self.fix(session, ORIGIN, age=900)
+        target = self.messages("target")[-1]
+        self.assertNotEqual(target["id"], trip)
+        self.page.evaluate("""() => {
+            Object.defineProperty(document,'hidden',{configurable:true,value:true});
+            document.dispatchEvent(new Event('visibilitychange'));
+            delete document.hidden;
+            document.dispatchEvent(new Event('visibilitychange'));
+        }""")
+        self.fix(session, (target["latitude"],target["longitude"]))
+        self.send("arrival", session, token=target["id"], placeID=target["placeID"],
+                  seen=[target["placeID"]], recent=[target["placeID"]])
+        self.page.clock.fast_forward(1800)
+        self.click("#snap")
+        self.assertIsNone(self.messages("walkPhoto")[-1]["visit"]["walked"])
+
+    def test_journal_omits_partial_distance_on_native_background_receipt(self):
+        self.enable_journal()
+        for interrupted in (False, True):
+            session = self.start()
+            self.fix(session, ORIGIN, age=1500)
+            target = self.messages("target")[-1]
+            for i in range(1, 5):
+                progress = i / 4
+                self.fix(session, (ORIGIN[0] + (target["latitude"] - ORIGIN[0]) * progress,
+                                   ORIGIN[1] + (target["longitude"] - ORIGIN[1]) * progress), age=1500-i*300)
+            self.send("arrival", session, token=target["id"], placeID=target["placeID"],
+                      seen=[target["placeID"]], recent=[target["placeID"]], distanceIncomplete=interrupted)
+            self.page.clock.fast_forward(1800)
+            self.click("#snap")
+            walked = self.messages("walkPhoto")[-1]["visit"]["walked"]
+            if interrupted:
+                self.assertIsNone(walked)
+            else:
+                self.assertGreater(walked, 150)
+            self.click("#again")
+
+    def test_journal_denied_real_walk_starts_a_separate_simulated_visit(self):
+        self.enable_journal()
+        session = self.start()
+        self.fix(session, ORIGIN, age=800)
+        real = self.messages("target")[0]["id"]
+        self.send("error", session, reason="denied")
+        simulation = self.messages("journalBegin")[0]
+        self.assertNotEqual(real, simulation["id"])
+        self.assertTrue(simulation["isSimulated"])
+        self.assertEqual(self.messages("journalFinish")[0]["status"], "interrupted")
+        self.assertEqual(self.messages("journalFinish")[0]["id"], real)
+        self.click("#redraw")
+        self.assertEqual(self.messages("journalBegin")[-1]["id"], simulation["id"])
+        self.page.locator("#stepTo").dispatch_event("pointerdown")
+        for _ in range(500):
+            self.page.clock.fast_forward(100)
+            if self.page.locator("#walkrow").is_hidden():
+                break
+        self.page.locator("#stepTo").dispatch_event("pointerup")
+        self.page.clock.fast_forward(1800)
+        arrived = self.messages("journalFinish")[-1]
+        self.assertEqual((arrived["id"],arrived["status"],arrived["stop"]), (simulation["id"],"arrived",1))
+        self.click("#visitNote")
+        self.assertEqual(self.messages("journal")[-1]["id"], simulation["id"])
+        self.click("#snap")
+        self.assertEqual(self.messages("walkPhoto")[-1]["visit"]["id"], simulation["id"])
+        self.click("#again")
+        self.click("#go")
+        self.assertNotEqual(self.messages("journalBegin")[-1]["id"], simulation["id"])
+
+    def test_journal_waits_for_selection_and_resumes_native_trip_id(self):
+        self.enable_journal()
+        session = self.start()
+        self.fix(session, north_of_edge(4999))
+        self.assertEqual(self.label("#go"), "那就走遠一點")
+        for action in ("target","journalBegin","journalFinish"):
+            self.assertEqual(self.messages(action), [])
+        self.page.reload(wait_until="domcontentloaded")
+        trip = "2731b579-0eb9-4fba-a962-f95bd18c3926"
+        self.send("resumeWalk", 41, placeID=PLACE["id"], id=trip)
+        self.click("#journalNote")
+        self.assertEqual(self.messages("journal"), [{"action":"journal","id":trip}])
+        self.fix(41, ORIGIN)
+        self.click("#redraw")
+        target = self.messages("target")[-1]
+        self.assertEqual(target["id"], trip)
+        self.send("arrival", 41, token=trip, placeID=target["placeID"], seen=[target["placeID"]], recent=[target["placeID"]])
+        self.page.clock.fast_forward(1800)
+        self.assertEqual(self.messages("journalFinish"), [])
+        self.assertFalse(self.page.locator("#journalNote").is_visible())
+        self.click("#visitNote")
+        self.assertEqual(self.messages("journal")[-1]["id"], trip)
+        self.click("#snap")
+        self.assertIsNone(self.messages("walkPhoto")[-1]["visit"]["walked"])
+
+    def test_historical_journal_cards_hide_unrevealed_places_and_unknown_fields(self):
+        self.enable_journal()
+        results = self.page.evaluate("""async ()=>{
+          const photo=document.createElement('canvas').toDataURL('image/jpeg').split(',')[1];
+          const original=CanvasRenderingContext2D.prototype.fillText;
+          let labels;
+          CanvasRenderingContext2D.prototype.fillText=function(text,...args){
+            labels.push(text); return original.call(this,text,...args);
+          };
+          try {
+            const result={};
+            for (const status of ['walking','stopped','interrupted','arrived','legacy']){
+              labels=[];
+              const trip={id:'saved',status,name:'保密地名',area:'保密地區',date:'2025.12.31',stop:3,walked:125};
+              if (status==='legacy') Object.assign(trip,{area:null,date:null,stop:null,walked:null});
+              const png=await lukangRenderJournalCard(photo,trip);
+              result[status]={header:png.slice(0,8),labels};
+            }
+            return result;
+          } finally {CanvasRenderingContext2D.prototype.fillText=original}
+        }""")
+        for record in results.values():
+            self.assertEqual(record["header"], "iVBORw0K")
+        for status in ("walking","stopped","interrupted"):
+            text = " ".join(results[status]["labels"])
+            self.assertNotIn("保密", text)
+            self.assertNotIn("第 3 站", text)
+        self.assertIn("保密地名・第 3 站", results["arrived"]["labels"])
+        self.assertIn("保密地區　2025.12.31", results["arrived"]["labels"])
+        legacy = " ".join(results["legacy"]["labels"])
+        self.assertIn("保密地名", legacy)
+        for missing in ("保密地區","走了","第 ","2025","null","undefined"):
+            self.assertNotIn(missing, legacy)
+
     def test_native_photo_album_and_real_visit_render_offline(self):
         self.enable_walk_photos()
         self.click("#photoAlbum")
@@ -230,6 +391,8 @@ class WalkBridgeTests(unittest.TestCase):
     def test_photo_hooks_require_native_and_its_capability(self):
         self.assertFalse(self.page.locator("#photoAlbum").is_visible())
         self.assertEqual(self.page.evaluate("typeof window.lukangRenderWalkCard"), "undefined")
+        self.assertEqual(self.page.evaluate("typeof window.lukangRenderJournalCard"), "undefined")
+        self.assertEqual(self.page.evaluate("typeof window.lukangJournalPlaces"), "undefined")
         web = self.browser.new_page()
         self.addCleanup(web.context.close)
         web.add_init_script("window.lukangWalkPhotos=true")

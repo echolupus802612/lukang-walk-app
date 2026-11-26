@@ -6,6 +6,7 @@ final class WalkProgress {
         let session: Int
         let token: String
         let date: String?
+        let distanceIncomplete: Bool?
     }
 
     private struct Values: Codable {
@@ -41,16 +42,18 @@ final class WalkProgress {
     }
 
     var pendingArrival: Arrival? { values.pendingArrival }
+    var visitedPlaces: (real: [Int], simulated: [Int]) { (values.seen, values.sim_seen) }
 
     var arrivalEvent: [String: Any]? {
         guard let arrival = pendingArrival else { return nil }
         var event: [String: Any] = ["type": "arrival", "session": arrival.session, "placeID": arrival.placeID,
                                     "token": arrival.token, "seen": values.seen, "recent": values.recent]
         if let date = arrival.date { event["date"] = date }
+        if arrival.distanceIncomplete == true { event["distanceIncomplete"] = true }
         return event
     }
 
-    func recordArrival(placeID: Int, session: Int) throws {
+    func recordArrival(placeID: Int, session: Int, visitID: String, distanceIncomplete: Bool) throws {
         if !values.seen.contains(placeID) { values.seen.append(placeID) }
         values.recent.removeAll { $0 == placeID }
         values.recent.insert(placeID, at: 0)
@@ -59,8 +62,8 @@ final class WalkProgress {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.dateFormat = "yyyy.MM.dd"
-        values.pendingArrival = Arrival(placeID: placeID, session: session, token: UUID().uuidString,
-                                        date: formatter.string(from: Date()))
+        values.pendingArrival = Arrival(placeID: placeID, session: session, token: visitID,
+                                        date: formatter.string(from: Date()), distanceIncomplete: distanceIncomplete)
         try persist()
     }
 

@@ -153,8 +153,9 @@
     // 文字：距離、地名＋第幾站、地點與日期
     c.fillStyle = t.ink; c.textBaseline = 'alphabetic';
     c.font = `700 ${Y(14)}px ${SANS}`; c.fillText(o.line, Y(22), Y(518));
-    c.font = `500 ${Y(16)}px ${KAI}`; c.fillText(`${o.name}・第 ${o.stop} 站`, Y(22), Y(542));
-    c.fillStyle = t.soft; c.font = `500 ${Y(11)}px ${SANS}`; c.fillText(`${o.place}　${o.date}`, Y(22), Y(563));
+    c.font = `500 ${Y(16)}px ${KAI}`;
+    c.fillText(o.stop == null ? o.name : `${o.name}・第 ${o.stop} 站`, Y(22), Y(542));
+    c.fillStyle = t.soft; c.font = `500 ${Y(11)}px ${SANS}`; c.fillText([o.place,o.date].filter(Boolean).join('　'), Y(22), Y(563));
     // 底列四個圖示，平均排開
     c.lineWidth = Y(2.2);
     const navY = Y(599);

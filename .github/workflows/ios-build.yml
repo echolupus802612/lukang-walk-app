@@ -34,6 +34,11 @@ jobs:
       - name: 檢查繁體中文與臺灣用語
         run: python3 tools/check_zh_tw.py
 
+      - name: 驗證散步日誌儲存與舊版資料遷移
+        run: |
+          xcrun swiftc -parse-as-library ios/LukangWalk/WalkJournalStore.swift tools/test_walk_journal.swift -o "$RUNNER_TEMP/test-walk-journal"
+          "$RUNNER_TEMP/test-walk-journal"
+
       - name: Select an available iPhone
         run: |
           xcodebuild -version
@@ -146,6 +151,36 @@ jobs:
                                         + chunk(b"IDAT", zlib.compress(row * height)) + chunk(b"IEND", b""))
           PY
           xcrun simctl addmedia "$SIMULATOR_ID" "$RUNNER_TEMP/Walk-Photo-Picker.png"
+          # 在全新安裝的模擬器建立 1.3 實際使用的兩種檔案，讓新版第一次啟動時匯入。
+          container="$(xcrun simctl get_app_container "$SIMULATOR_ID" "$BUNDLE_ID" data)"
+          icon="ios/LukangWalk/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+          sips -s format jpeg "$RUNNER_TEMP/Walk-Photo-Picker.png" --out "$RUNNER_TEMP/legacy-a.jpg" > /dev/null
+          sips -s format jpeg "$icon" --out "$RUNNER_TEMP/legacy-b.jpg" > /dev/null
+          python3 - "$container" "$RUNNER_TEMP" "$icon" <<'PY'
+          from pathlib import Path
+          import json, shutil, sys
+          data, temp, icon = map(Path, sys.argv[1:])
+          walk = data / "Library/Application Support/Walk"
+          album = walk / "PhotoAlbum"
+          album.mkdir(parents=True, exist_ok=True)
+          records = []
+          for index, (day, jpeg, png) in enumerate([
+              ("2026.11.05", temp / "legacy-a.jpg", temp / "Walk-Photo-Picker.png"),
+              ("2026.10.16", temp / "legacy-b.jpg", icon)
+          ], start=1):
+              visit_id = f"95677970-90CB-48F9-BD5B-00000000000{index}"
+              generation = f"25CF3C04-9333-49AB-8CEC-00000000000{index}"
+              folder = album / generation
+              folder.mkdir()
+              shutil.copyfile(jpeg, folder / "photo.jpg")
+              shutil.copyfile(png, folder / "card.png")
+              visit = dict(id=visit_id, placeID=1009, name="楠仔腳蔓社學堂遺蹟", date=day, isSimulated=False)
+              records.append(dict(visit=visit, generation=generation))
+          (album / "visits.json").write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
+          footprints = dict(ver=2, voice=True, drawn=3, seen=[1009, 1008], recent=[1009, 1008],
+                            sim_drawn=0, sim_seen=[], sim_recent=[])
+          (walk / "footprints.json").write_text(json.dumps(footprints), encoding="utf-8")
+          PY
           xcodebuild test-without-building "${settings[@]}" \
             -resultBundlePath "$RUNNER_TEMP/LukangWalk-Tests.xcresult"
           xcrun xcresulttool get test-results summary \

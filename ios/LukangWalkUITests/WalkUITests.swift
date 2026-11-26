@@ -150,6 +150,9 @@ final class WalkUITests: XCTestCase {
 
     @MainActor
     private func selectPhotoFromSystemLibrary(_ app: XCUIApplication) {
+        let library = app.buttons["從相簿選取"]
+        XCTAssertTrue(library.waitForExistence(timeout: 5))
+        library.tap()
         let grid = app.otherElements["PXGGridLayout-Group"].firstMatch
         XCTAssertTrue(grid.waitForExistence(timeout: 10), app.debugDescription)
         let frame = grid.frame
@@ -200,16 +203,22 @@ final class WalkUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         startGPSWalk(app, at: start)
+        let game = app.webViews.firstMatch
+        game.buttons["記一筆"].tap()
+        let detail = app.tables["walkJournalDetail"]
+        let addPhoto = detail.cells["walkJournalAddPhoto"]
+        XCTAssertTrue(addPhoto.waitForExistence(timeout: 8))
+        addPhoto.tap()
+        selectPhotoFromSystemLibrary(app)
+        XCTAssertTrue(detail.cells["walkJournalPhoto"].waitForExistence(timeout: 15))
+        app.buttons["walkJournalDone"].tap()
+
         setLocation(.init(latitude: 23.95376, longitude: start.longitude))
         Thread.sleep(forTimeInterval: 1.2)
         setLocation(.init(latitude: 23.95361, longitude: start.longitude))
-        let game = app.webViews.firstMatch
         let keepPhoto = game.buttons["拍一張留念"]
         XCTAssertTrue(keepPhoto.waitForExistence(timeout: 15))
         keepPhoto.tap()
-        let library = app.buttons["從相簿選取"]
-        XCTAssertTrue(library.waitForExistence(timeout: 5))
-        library.tap()
         selectPhotoFromSystemLibrary(app)
 
         let placeName = "奧萬大自然教育中心"
@@ -222,15 +231,26 @@ final class WalkUITests: XCTestCase {
         add(savedCard)
         app.terminate()
         app.launch()
-        let album = game.buttons["相片足跡"]
-        XCTAssertTrue(album.waitForExistence(timeout: 15))
-        album.tap()
-        let row = app.tables["walkAlbumList"].cells.matching(NSPredicate(
-            format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "walkAlbumVisit-", placeName
+        let journal = game.buttons["散步日誌"]
+        XCTAssertTrue(journal.waitForExistence(timeout: 15))
+        journal.tap()
+        let row = app.tables["walkJournalList"].cells.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "walkJournalEntry-", placeName
         )).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         row.tap()
         XCTAssertTrue(app.navigationBars[placeName].waitForExistence(timeout: 8))
+        let photos = detail.cells.matching(NSPredicate(format: "identifier BEGINSWITH %@", "walkJournalPhoto-"))
+        let earlier = photos.matching(NSPredicate(format: "label CONTAINS %@", "散步途中")).firstMatch
+        XCTAssertTrue(earlier.waitForExistence(timeout: 8))
+        XCTAssertEqual(photos.count, 2, "同一趟的途中和到站相片都要留下")
+        earlier.tap()
+        XCTAssertTrue(app.navigationBars["散步途中"].waitForExistence(timeout: 8))
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        app.buttons["walkAlbumDone"].tap()
+        let arrivalPhoto = photos.matching(NSPredicate(format: "label CONTAINS %@", placeName)).firstMatch
+        XCTAssertTrue(arrivalPhoto.waitForExistence(timeout: 8))
+        arrivalPhoto.tap()
         XCTAssertTrue(card.waitForExistence(timeout: 8))
         let picker = app.segmentedControls["walkAlbumImagePicker"]
         picker.buttons["照片"].tap()
@@ -248,6 +268,109 @@ final class WalkUITests: XCTestCase {
         evidence.lifetime = .keepAlways
         add(evidence)
         #endif
+    }
+
+    @MainActor
+    private func openJournal(_ app: XCUIApplication) {
+        let button = app.webViews.firstMatch.buttons["散步日誌"]
+        XCTAssertTrue(button.waitForExistence(timeout: 15))
+        button.tap()
+        XCTAssertTrue(app.tables["walkJournalList"].waitForExistence(timeout: 8))
+    }
+
+    @MainActor
+    func testJournalImportsTwoPhotoVisitsAndOneUndatedPlaceOnlyOnce() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("此情境使用模擬器預先放入的 1.3 足跡。")
+        #else
+        let app = XCUIApplication()
+        for round in 0..<2 {
+            app.launch()
+            openJournal(app)
+            let table = app.tables["walkJournalList"]
+            let place = "楠仔腳蔓社學堂遺蹟"
+            let visits = table.cells.matching(NSPredicate(format: "label CONTAINS %@", place))
+            XCTAssertEqual(visits.count, 2, "同地兩張舊照片是兩筆不同日期的紀錄")
+            for date in ["2026.11.05", "2026.10.16"] {
+                let visit = visits.matching(NSPredicate(format: "label CONTAINS %@", date)).firstMatch
+                XCTAssertTrue(visit.exists)
+                if round == 0 {
+                    visit.tap()
+                    let fullPhoto = app.cells["walkJournalPhoto"]
+                    XCTAssertTrue(fullPhoto.waitForExistence(timeout: 6))
+                    fullPhoto.tap()
+                    XCTAssertTrue(app.images["walkAlbumCardImage"].waitForExistence(timeout: 8))
+                    app.buttons["walkAlbumDone"].tap()
+                    app.navigationBars[place].buttons.element(boundBy: 0).tap()
+                }
+            }
+            let legacy = table.cells.matching(NSPredicate(format: "label CONTAINS %@", "東埔溫泉"))
+            XCTAssertEqual(legacy.count, 1)
+            XCTAssertTrue(table.staticTexts["以往到過的地點"].exists)
+            legacy.firstMatch.tap()
+            let detail = app.tables["walkJournalDetail"]
+            XCTAssertTrue(detail.staticTexts["以往到過"].waitForExistence(timeout: 6))
+            XCTAssertFalse(detail.staticTexts["日期"].exists)
+            XCTAssertFalse(detail.staticTexts["出發時間"].exists)
+            XCTAssertFalse(detail.cells["walkJournalAddPhoto"].exists)
+            XCTAssertTrue(detail.cells["walkJournalMap"].exists)
+            app.terminate()
+        }
+        #endif
+    }
+
+    @MainActor
+    func testJournalSavesNotesFiltersFavoritesAndHidesUnreachedDestination() {
+        let previousLocation = XCUIDevice.shared.location
+        defer { XCUIDevice.shared.location = previousLocation }
+        // 這個起點只會抽到鳶峰觀景台；測試全程留在起點。
+        let start = CLLocationCoordinate2D(latitude: 24.11967, longitude: 121.23742)
+        setLocation(start)
+        let app = XCUIApplication()
+        app.launch()
+        startGPSWalk(app, at: start)
+        let game = app.webViews.firstMatch
+        game.buttons["記一筆"].tap()
+        let detail = app.tables["walkJournalDetail"]
+        XCTAssertTrue(detail.staticTexts["散步中"].waitForExistence(timeout: 8))
+        XCTAssertFalse(detail.cells["walkJournalMap"].exists)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "鳶峰觀景台")).firstMatch.exists)
+        detail.cells["walkJournalNote"].tap()
+        let editor = app.textViews["walkJournalEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        let note = "Walk " + String(UUID().uuidString.prefix(8))
+        editor.typeText(note)
+        app.buttons["walkJournalSaveNote"].tap()
+        detail.cells["walkJournalFavorite"].tap()
+        XCTAssertTrue(detail.staticTexts["取消收藏"].waitForExistence(timeout: 5))
+        app.buttons["walkJournalDone"].tap()
+        game.buttons["收工"].tap()
+        XCTAssertTrue(game.staticTexts["已收工"].waitForExistence(timeout: 5))
+        app.terminate()
+        app.launch()
+        openJournal(app)
+        app.buttons["walkJournalFavoritesFilter"].tap()
+        let search = app.searchFields["walkJournalSearch"]
+        search.tap()
+        search.typeText(note)
+        let result = app.tables["walkJournalList"].cells.matching(NSPredicate(format: "label CONTAINS %@", note)).firstMatch
+        XCTAssertTrue(result.waitForExistence(timeout: 8))
+        XCTAssertTrue(result.label.contains("已收工"))
+        XCTAssertTrue(result.label.contains("已收藏"))
+        XCTAssertFalse(result.label.contains("鳶峰"))
+        result.tap()
+        XCTAssertTrue(detail.staticTexts["已收工"].waitForExistence(timeout: 8))
+        XCTAssertFalse(detail.cells["walkJournalMap"].exists)
+        XCTAssertTrue(detail.staticTexts[note].exists)
+        detail.cells["walkJournalNote"].tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.typeText(" updated")
+        app.buttons["walkJournalSaveNote"].tap()
+        XCTAssertTrue(detail.staticTexts[note + " updated"].waitForExistence(timeout: 5))
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "重新開啟的散步日誌筆記"
+        evidence.lifetime = .keepAlways
+        add(evidence)
     }
 
     @MainActor

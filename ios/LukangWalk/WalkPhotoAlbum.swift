@@ -10,12 +10,18 @@ final class WalkPhotoAlbum {
         let name: String
         let date: String
         let isSimulated: Bool
+        var tripID: String? = nil
+        var journalID: String { tripID ?? id }
     }
 
     private static let files = WalkPhotoFiles()
 
     func save(visit: Visit, photo: Data, card: Data) async throws {
         try await Self.files.save(visit: visit, photo: photo, card: card)
+    }
+
+    func savedVisits() async throws -> [Visit] {
+        try await Self.files.records().map(\.visit)
     }
 
     @MainActor
