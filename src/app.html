@@ -59,10 +59,12 @@ body{margin:0;background:radial-gradient(120% 70% at 50% 38%,var(--bg) 0%,var(--
 .say{margin:12px auto 0;max-width:360px;min-height:52px;text-align:center;font:400 18px/1.45 "LXGW WenKai TC",serif;
   padding:12px 16px;border-radius:16px;background:rgba(0,0,0,.16);opacity:0;transform:translateY(6px);transition:.35s}
 .say.on{opacity:1;transform:none}
-.bands{display:flex;gap:8px;justify-content:center;margin-top:14px}
-.bands button{flex:1;max-width:120px}
-.bands.long{display:grid;grid-template-columns:repeat(3,1fr)}
-.bands.long button{max-width:none;padding:0 4px;font-size:14px}
+/* 主頁的按鈕和選單同一套：米白（深色時深棕）圓角卡片，格子用細線分開 */
+.bands,.acts,.minor,.sim{display:flex;background:var(--card);color:var(--cardink);border-radius:16px;overflow:hidden}
+.bands{margin-top:14px;padding:4px;gap:4px}
+.bands button{flex:1;min-height:46px;background:none;border:0;border-radius:12px;color:var(--cardink);
+  font:400 17px/1 "LXGW WenKai TC",serif}
+.bands button.sel{background:#9a3a27;color:#fbf3e6}
 button{font:500 16px/1 "Noto Sans TC",sans-serif;color:var(--ink);background:rgba(0,0,0,.18);
   border:1px solid var(--line);border-radius:14px;min-height:46px;padding:0 14px;cursor:pointer}
 button.sel{background:var(--ink);color:var(--bg2);border-color:var(--ink)}
@@ -71,14 +73,15 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   background:var(--gold);color:#3a1a12;border:0;box-shadow:0 6px 0 var(--gold2)}
 .main:active{transform:translateY(3px);box-shadow:0 3px 0 var(--gold2)}
 .row{display:flex;gap:8px;margin-top:10px}.row button{flex:1}
-/* 走路中的主要操作只用文字：換個地方｜收工；次要的再小一號 */
-.acts{display:flex;justify-content:center;align-items:center;gap:18px;margin-top:14px}
-.acts button,.minor button{background:none;border:0;border-radius:10px;color:var(--ink);padding:0 10px}
-.acts button{font:400 19px/1 "LXGW WenKai TC",serif}
-.acts i{width:1px;height:18px;background:var(--line)}
-.minor{display:flex;justify-content:center;gap:18px;margin-top:4px}
-.minor button{font-size:14px;color:var(--soft);display:flex;align-items:center;gap:6px;min-height:44px}
-.minor svg{width:16px;height:16px;stroke-width:1.8}
+/* 走路中：換個地方｜收工 一張卡；帶我回去｜記一筆 再一張 */
+.acts{align-items:center;margin-top:14px}
+.minor{margin-top:10px}
+.minor:not(:has(button:not([hidden]))){display:none}
+.acts button,.minor button,.sim button{flex:1;min-height:52px;background:none;border:0;border-radius:0;color:var(--cardink);
+  display:flex;align-items:center;justify-content:center;gap:8px;font:400 17px/1 "LXGW WenKai TC",serif}
+.acts i{flex:none;width:1px;height:24px;background:currentColor;opacity:.15}
+.minor button:not([hidden])~button:not([hidden]),.sim button+button{border-inline-start:1px solid color-mix(in srgb,currentColor 15%,transparent)}
+.minor svg{width:18px;height:18px;stroke-width:1.8}
 /* 底部分頁：散步／散步筆記／選單 */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:4;display:flex;justify-content:center;
   padding:6px 0 max(8px,env(safe-area-inset-bottom));background:var(--bg2);border-top:1px solid rgba(251,243,230,.08)}
@@ -119,7 +122,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 .opts .note{margin-inline-start:auto;font-size:13px;opacity:.6}
 .toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:8;background:var(--cardink);color:var(--card);
   padding:8px 16px;border-radius:999px;font-size:14px;white-space:nowrap;pointer-events:none}
-.sim{display:none;gap:8px;margin-top:10px}.sim.on{display:flex}.sim button{flex:1;font-size:15px}
+.sim{display:none;margin-top:10px}.sim.on{display:flex}.sim button{font-size:15px;white-space:nowrap;padding:0 4px}
 .foot{margin-top:12px;text-align:center;font-size:13px;color:var(--soft)}
 .foot a{color:var(--soft)}
 .footlinks{display:flex;justify-content:center;align-items:center;gap:10px}
@@ -195,7 +198,6 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 
   <div class="bands" id="bands">
     <button data-b="0" aria-pressed="false">近 ~500m</button><button data-b="1" class="sel" aria-pressed="true">中 ~1km</button><button data-b="2" aria-pressed="false">遠 ~2km</button>
-    <button data-b="3" aria-pressed="false" hidden>2–10 公里</button><button data-b="4" aria-pressed="false" hidden>10–100 公里</button><button data-b="5" aria-pressed="false" hidden>100 公里以上</button>
   </div>
   <button class="main" id="go">出門散步吧</button>
   <div class="acts" id="walkrow" hidden><button id="redraw">換個地方</button><i aria-hidden="true"></i><button id="stop">收工</button></div>
@@ -265,7 +267,6 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 {
 const PLACES = /*DATA*/[];
 const BANDS = [{max:500,min:0},{max:1000,min:400},{max:2000,min:900}];
-const LONG_BANDS = [{min:2000,max:10000},{min:10000,max:100000},{min:100000,max:Infinity}];
 const ARRIVE = 25, ACC_OK = 40, SIM_HOME = 32, NO_PLACE = 5000;   // 模擬起點：鹿港天后宮（編號 32）；5 公里內沒有地點就改用模擬
 const DIR8 = ['北','東北','東','東南','南','西南','西','西北'];
 const HINT = {worship:'一座廟或祠',history:'一處老宅或舊址',structure:'一段巷弄、一棟老樓',nature:'一片能歇腳的地方',scenic:'一處看風景的地方',culture:'一處館舍或藝文空間',shop:'一間老店',other:'說不上來的地方'};
@@ -356,17 +357,12 @@ const fmt = m => m>=1000?[(m/1000).toFixed(1),'公里']:[String(Math.round(m)),'
 function draw(pos, band){
   const recent = rec('recent'), cur = S.target && S.target.id;
   const all = PLACES.map(p=>({p,d:dist(pos,[p.lat,p.lng])})).filter(x=>x.p.id!==cur && x.d>=60);
-  const long=navigation && LONG_BANDS[band-BANDS.length];
-  const candidates=long ? all.filter(x=>x.d>=long.min && x.d<long.max) : all;
-  let pool = candidates.filter(x=>!recent.includes(x.p.id));
-  if (!pool.length) pool = candidates;
-  let ring=pool;
-  if (!long){
-    const b = BANDS[band];
-    ring = pool.filter(x=>x.d>=b.min && x.d<=b.max);
-    if (ring.length<4) ring = pool.filter(x=>x.d<=b.max);
-    if (!ring.length) return {none:true, near: pool.sort((a,b)=>a.d-b.d)[0] || null};
-  } else if (!ring.length) return {none:true};
+  let pool = all.filter(x=>!recent.includes(x.p.id));
+  if (!pool.length) pool = all;
+  const b = BANDS[band];
+  let ring = pool.filter(x=>x.d>=b.min && x.d<=b.max);
+  if (ring.length<4) ring = pool.filter(x=>x.d<=b.max);
+  if (!ring.length) return {none:true, near: pool.sort((a,b)=>a.d-b.d)[0] || null};
   const w = ring.map(x=>1/Math.max(x.d,120)**2), sum = w.reduce((a,c)=>a+c,0);
   let r = Math.random()*sum;
   for (let i=0;i<ring.length;i++){ if((r-=w[i])<=0) return ring[i]; }
@@ -550,7 +546,7 @@ async function go(){
         const reason={denied:'未取得定位權限',approximate:'目前只允許大概位置'}[S.locationFailure]||'拿不到目前位置';
         useSim(native?reason+'，先在鹿港天后宮前模擬走走。':'拿不到定位（需要 HTTPS 網址並允許定位），先在鹿港天后宮前模擬走走。');
       }
-      else if (S.band<BANDS.length && !PLACES.some(p=>dist(S.pos,[p.lat,p.lng])<=NO_PLACE)){ S.offer=null; useSim('你附近 5 公里內還沒有收錄的地點，先在鹿港天后宮前模擬走走。'); }
+      else if (!PLACES.some(p=>dist(S.pos,[p.lat,p.lng])<=NO_PLACE)){ S.offer=null; useSim('你附近 5 公里內還沒有收錄的地點，先在鹿港天后宮前模擬走走。'); }
       else { $('mode').textContent = S.heading==null?'GPS（無指南針）':'GPS 實走'; $('foot').textContent=''; }
     }
     $('go').disabled=false;
@@ -567,7 +563,7 @@ function pick(){
     const n = x.near;
     S.offer = n;
     S.started=false; stopSensors();
-    $('hint').textContent = n ? offerHint(n) : S.band>=BANDS.length ? '這個距離範圍沒有收錄地點，換個距離試試。' : '附近沒有可以去的地方';
+    $('hint').textContent = n ? offerHint(n) : '附近沒有可以去的地方';
     $('go').textContent = n ? '那就走遠一點' : '出門散步吧';
     return;
   }
@@ -714,7 +710,7 @@ function receiveWalkEvent({detail}){
     if (nativeJournal){ tripID=typeof detail.id==='string' ? detail.id : null; previousLegs=null; }
     if (navigation && tripID) try{
       const saved=JSON.parse(localStorage.getItem('lukangNavBand'));
-      if (saved?.id===tripID && Number.isInteger(saved.band) && saved.band>=0 && saved.band<BANDS.length+LONG_BANDS.length) selectBand(saved.band);
+      if (saved?.id===tripID && Number.isInteger(saved.band) && saved.band>=0 && saved.band<BANDS.length) selectBand(saved.band);
     }catch(e){}
     listenToNative(session);
     $('mode').textContent='GPS（無指南針）'; $('dist').textContent='？'; $('sub').textContent='正在取得目前位置…'; $('foot').textContent='';
@@ -857,8 +853,7 @@ function selectBand(band){
 document.querySelectorAll('#bands button').forEach(b=>b.onclick=()=>selectBand(+b.dataset.b));
 if (navigation){
   $('returnNavigation').hidden=false; $('navigationSettings').hidden=false; $('hideDistanceRow').hidden=false;
-  $('cardNavlinks').hidden=false; $('bands').classList.add('long');
-  document.querySelectorAll('#bands button[hidden]').forEach(b=>b.hidden=false);
+  $('cardNavlinks').hidden=false;
   $('navigationSettings').onclick=()=>native.postMessage({action:'navigationSettings'});
   $('hideDistanceRow').onclick=()=>{
     const hidden=!navPrefs.hideDistance;

@@ -274,38 +274,6 @@ class WalkBridgeTests(unittest.TestCase):
         self.assertEqual(len(self.messages("arrived")),1)
         self.assertEqual(self.messages("journalFinish")[-1]["status"],"arrived")
 
-    def test_strict_long_distance_bands_with_remote_origin_and_reload(self):
-        self.enable_navigation()
-        def choose(band,point):
-            self.click(f'#bands [data-b="{band}"]')
-            self.click("#go")
-            session=self.messages("start")[-1]["session"]
-            self.fix(session,point)
-            return session
-        def meters(origin,target):
-            a,b=map(radians,origin)
-            c,d=map(radians,(target["latitude"],target["longitude"]))
-            return 2*6371000*asin(sqrt(sin((c-a)/2)**2+cos(a)*cos(c)*sin((d-b)/2)**2))
-        point=north_of_edge(10001)
-        choose(3,point)
-        self.assertIn("換個距離",self.label("#hint"))
-        self.assertNotIn("那就走遠一點",self.label("#go"))
-        self.assertEqual(self.messages("journalBegin"), [])
-        self.assertEqual(self.messages("target"), [])
-        for band,point,lower,upper in ((3,north_of_edge(6000),2000,10000),(4,point,10000,100000),(5,ORIGIN,100000,float("inf"))):
-            session=choose(band,point)
-            target=self.messages("target")[-1]
-            self.assertFalse(target["isSimulated"])
-            self.assertLess(meters(point,target),upper)
-            self.assertGreaterEqual(meters(point,target),lower)
-            if band==5:
-                self.page.reload(wait_until="domcontentloaded")
-                self.send("resumeWalk",session,id=target["id"],placeID=target["placeID"])
-                self.fix(session,point)
-                self.click("#redraw")
-                self.assertGreaterEqual(meters(point,self.messages("target")[-1]),lower)
-            self.click("#stop")
-
     def test_real_journal_reuses_trip_on_redraw_and_finishes_on_stop(self):
         self.enable_journal()
         self.assertEqual(self.label("#photoAlbum"), "散步日誌")
