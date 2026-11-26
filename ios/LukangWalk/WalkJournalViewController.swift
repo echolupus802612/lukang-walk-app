@@ -113,6 +113,7 @@ final class WalkJournalViewController: UITableViewController, UISearchResultsUpd
     func updateSearchResults(for searchController: UISearchController) { filter() }
 
     private func filter() {
+        navigationItem.prompt = store.hasUnreadableEntries ? "部分散步紀錄暫時無法讀取，原檔已保留。" : nil
         let query = (search.searchBar.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let hits = entries.filter { entry in
             (!favoritesOnly || entry.favorite) && (query.isEmpty || entry.journalTitle.localizedStandardContains(query)

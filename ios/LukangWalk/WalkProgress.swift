@@ -12,6 +12,7 @@ final class WalkProgress {
     private struct Values: Codable {
         var ver = 2
         var voice = true
+        var theme: String?
         var drawn = 0
         var seen: [Int] = []
         var recent: [Int] = []
@@ -26,10 +27,10 @@ final class WalkProgress {
     private var values = Values()
     private var loaded = false
 
-    init() {
+    init(folder: URL? = nil) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        folder = support.appendingPathComponent("Walk", isDirectory: true)
-        file = folder.appendingPathComponent("footprints.json")
+        self.folder = folder ?? support.appendingPathComponent("Walk", isDirectory: true)
+        file = self.folder.appendingPathComponent("footprints.json")
         try? ensureLoaded()
     }
 
@@ -92,6 +93,7 @@ final class WalkProgress {
         for (key, value) in changes {
             switch (key, value) {
             case ("voice", let enabled as Bool): next.voice = enabled
+            case ("theme", let theme as String) where ["", "light", "dark"].contains(theme): next.theme = theme
             case ("drawn", let count as Int) where count >= 0: next.drawn = count
             case ("sim_drawn", let count as Int) where count >= 0: next.sim_drawn = count
             case ("seen", let ids as [Int]): next.seen = ids

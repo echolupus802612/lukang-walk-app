@@ -4,15 +4,7 @@ import UIKit
 import UniformTypeIdentifiers
 
 final class WalkPhotoAlbum {
-    struct Visit: Codable, Sendable {
-        let id: String
-        let placeID: Int
-        let name: String
-        let date: String
-        let isSimulated: Bool
-        var tripID: String? = nil
-        var journalID: String { tripID ?? id }
-    }
+    typealias Visit = WalkPhotoVisit
 
     private static let files = WalkPhotoFiles()
 
@@ -332,7 +324,7 @@ private final class WalkPhotoDetail: UIViewController {
             do {
                 let copy = try await files.sharableCard(record)
                 guard viewIfLoaded?.window != nil else { await files.discardShare(copy); return }
-                let words = WalkShareCaption(place: record.visit.name)
+                let words = WalkShareCaption(text: record.visit.shareText)
                 let sheet = UIActivityViewController(activityItems: [copy, words], applicationActivities: nil)
                 sheet.popoverPresentationController?.sourceView = shareButton
                 sheet.popoverPresentationController?.sourceRect = shareButton.bounds
@@ -357,8 +349,8 @@ private final class WalkPhotoDetail: UIViewController {
 final class WalkShareCaption: NSObject, UIActivityItemSource {
     private let text: String
 
-    init(place: String) {
-        text = "跟著小嚮導走到了\(place)！#散步吧"
+    init(text: String) {
+        self.text = text
     }
 
     static func isInstagram(_ type: UIActivity.ActivityType) -> Bool {

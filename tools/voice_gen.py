@@ -7,8 +7,12 @@ import json
 import msvcrt
 import re
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from voice_jobs import voice_jobs
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -164,12 +168,16 @@ def read_key():
     return keys.pop()
 
 
+def validate_jobs(jobs):
+    names = [job["file"] for job in jobs]
+    expected = {job["file"] for job in voice_jobs()}
+    if len(names) != len(expected) or set(names) != expected:
+        raise ValueError("配音清單有缺漏、重複或非預期的檔名。")
+
+
 def run():
     jobs = read_json(ART / "jobs.json")
-    names = [job["file"] for job in jobs]
-    if (len(jobs) != 87 or len(set(n.casefold() for n in names)) != len(names)
-            or not all(re.fullmatch(r"[A-Za-z0-9_-]+\.mp3", n) for n in names)):
-        raise ValueError("Unexpected job count or filename")
+    validate_jobs(jobs)
     key = read_key()
     status, _, data = request(key, "GET", f"voices/{VOICE}")
     if status != 200:

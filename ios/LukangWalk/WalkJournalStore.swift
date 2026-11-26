@@ -40,17 +40,23 @@ final class WalkJournalStore {
     }
 
     private let folder: URL
+    private let defaults: UserDefaults
+    private let pendingStopsKey = "Walk.journalPendingStops"
     private let manager = FileManager.default
     private let day: DateFormatter
     private var prepared = false
     private var cached: [UUID: Entry] = [:]
+    private var damagedFiles: [UUID: URL] = [:]
+    private var readFailures: [UUID: (file: URL, error: Error)] = [:]
+    var hasUnreadableEntries: Bool { !damagedFiles.isEmpty || !readFailures.isEmpty }
     private var revision: UInt?
     // 兩個畫面或兩個 store 共用同一份日誌時，舊的記憶體清單須重新讀取。
     private static var diskRevision: UInt = 0
 
-    init(folder: URL? = nil) {
+    init(folder: URL? = nil, defaults: UserDefaults = .standard) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         self.folder = folder ?? support.appendingPathComponent("Walk/Journal", isDirectory: true)
+        self.defaults = defaults
         day = DateFormatter()
         day.locale = Locale(identifier: "en_US_POSIX")
         day.calendar = Calendar(identifier: .gregorian)
@@ -76,6 +82,7 @@ final class WalkJournalStore {
     func entry(id: String) throws -> Entry? {
         guard let key = UUID(uuidString: id) else { return nil }
         try load()
+        if let failure = readFailures[key] { throw failure.error }
         return cached[key]
     }
 
@@ -121,6 +128,43 @@ final class WalkJournalStore {
         if try write(value) { notify() }
     }
 
+    // 按下收工時就記下結束時間。日誌暫時無法寫入時，下次再開啟仍能用原時間補記。
+    private var pendingStops: [String: [String: Any]] {
+        defaults.dictionary(forKey: pendingStopsKey) as? [String: [String: Any]] ?? [:]
+    }
+
+    func stop(id: String, at: Date = Date(), stop: Int? = nil, walked: Double? = nil) throws {
+        let key = try Self.key(id).uuidString
+        var pending = pendingStops
+        if pending[key] == nil {
+            var receipt: [String: Any] = ["at": at]
+            if let stop, stop >= 0 { receipt["stop"] = stop }
+            if let walked, walked.isFinite, walked >= 0 { receipt["walked"] = walked }
+            pending[key] = receipt
+            defaults.set(pending, forKey: pendingStopsKey)
+        }
+        if let receipt = pending[key] { try applyStop(id: key, receipt: receipt) }
+    }
+
+    private func applyStop(id: String, receipt: [String: Any]) throws {
+        guard let at = receipt["at"] as? Date else { throw CocoaError(.fileReadCorruptFile) }
+        if try entry(id: id) != nil {
+            try finish(id: id, status: .stopped, at: at, stop: receipt["stop"] as? Int,
+                       walked: receipt["walked"] as? Double)
+        }
+        var pending = pendingStops
+        pending.removeValue(forKey: id)
+        if pending.isEmpty { defaults.removeObject(forKey: pendingStopsKey) }
+        else { defaults.set(pending, forKey: pendingStopsKey) }
+    }
+
+    func retryPendingStops() {
+        for (id, receipt) in pendingStops {
+            // 這一筆寫入失敗時保留回條，讓其他行程仍能補記。
+            try? applyStop(id: id, receipt: receipt)
+        }
+    }
+
     // 舊版抵達回條只有日期。重新開啟 App 的時間不能當成抵達時間。
     func recoverArrival(id: String, placeID: Int, name: String, isSimulated: Bool, date: String?,
                         latitude: Double?, longitude: Double?) throws {
@@ -132,8 +176,10 @@ final class WalkJournalStore {
 
     func interruptWalking(except id: String? = nil) throws {
         try load()
+        retryPendingStops()
         let preserved = id.flatMap(UUID.init(uuidString:))
-        let active = cached.filter { $0.key != preserved && $0.value.status == .walking }
+        let waiting = Set(pendingStops.keys)
+        let active = cached.filter { $0.key != preserved && !waiting.contains($0.key.uuidString) && $0.value.status == .walking }
         var changed = false
         defer { if changed { notify() } }
         for (_, var value) in active {
@@ -155,7 +201,7 @@ final class WalkJournalStore {
         if try write(value) { notify() }
     }
 
-    func migrate(photoVisits: [WalkPhotoAlbum.Visit], seen: [Int], simSeen: [Int],
+    func migrate(photoVisits: [WalkPhotoVisit], seen: [Int], simSeen: [Int],
                  place: (Int) -> Place?) throws {
         guard needsMigration else { return }
         try load()
@@ -164,6 +210,7 @@ final class WalkJournalStore {
         for visit in photoVisits where visit.tripID == nil {
             // 新版途中也能留照；已有逐趟紀錄時，以該趟的實際狀態為準。
             let key = try Self.key(visit.id)
+            if readFailures[key] != nil { continue }
             if var existing = cached[key] {
                 // 舊回條可能沒有日期；同趟同地的到站照片保留了日曆日期。
                 if existing.status == .arrived, existing.date.isEmpty,
@@ -180,6 +227,8 @@ final class WalkJournalStore {
                                  latitude: site?.latitude, longitude: site?.longitude)
             if try write(record) { changed = true }
         }
+        // 尚有舊檔無法讀取時，無法判斷它代表哪一站，稍後再補舊地點並標記遷移完成。
+        guard readFailures.isEmpty else { return }
         var represented = Set(cached.values.filter { $0.status == .arrived || $0.status == .legacy }
             .map { Site(placeID: $0.placeID, simulated: $0.isSimulated) })
         for (simulated, ids) in [(false, seen), (true, simSeen)] {
@@ -246,26 +295,37 @@ final class WalkJournalStore {
     }
 
     private func load() throws {
-        guard revision != Self.diskRevision else { return }
         let names: [URL]
-        do {
-            names = try manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
-        } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
-            cached = [:]
-            revision = Self.diskRevision
-            return
+        if revision == Self.diskRevision {
+            guard !readFailures.isEmpty else { return }
+            names = readFailures.values.map { $0.file }
+        } else {
+            do {
+                names = try manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
+            } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+                names = []
+            }
+            cached.removeAll()
+            damagedFiles.removeAll()
+            readFailures.removeAll()
         }
-        var loaded: [UUID: Entry] = [:]
         let decoder = JSONDecoder()
         for file in names where file.pathExtension == "json" {
-            let value = try decoder.decode(Entry.self, from: Data(contentsOf: file))
-            let key = try Self.key(value.id)
-            guard UUID(uuidString: file.deletingPathExtension().lastPathComponent) == key, loaded[key] == nil else {
-                throw CocoaError(.fileReadCorruptFile)
+            guard let key = UUID(uuidString: file.deletingPathExtension().lastPathComponent) else { continue }
+            let data: Data
+            do {
+                data = try Data(contentsOf: file)
+            } catch {
+                readFailures[key] = (file, error)
+                continue
             }
-            loaded[key] = value
+            readFailures.removeValue(forKey: key)
+            guard let value = try? decoder.decode(Entry.self, from: data), UUID(uuidString: value.id) == key else {
+                damagedFiles[key] = file
+                continue
+            }
+            cached[key] = value
         }
-        cached = loaded
         revision = Self.diskRevision
     }
 
@@ -281,9 +341,15 @@ final class WalkJournalStore {
 
     private func write(_ value: Entry) throws -> Bool {
         let key = try Self.key(value.id)
+        if let failure = readFailures[key] { throw failure.error }
         guard cached[key] != value else { return false }
         try prepareFolder()
         let file = folder.appendingPathComponent(key.uuidString).appendingPathExtension("json")
+        if let damaged = damagedFiles[key] {
+            // 同一筆若能用到站回條重建，先保留損壞的原檔。
+            try manager.moveItem(at: damaged, to: damaged.appendingPathExtension(UUID().uuidString + ".damaged"))
+            damagedFiles.removeValue(forKey: key)
+        }
         try JSONEncoder().encode(value).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         cached[key] = value
         Self.diskRevision &+= 1

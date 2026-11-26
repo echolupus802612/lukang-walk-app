@@ -168,7 +168,9 @@ class WalkBridgeTests(unittest.TestCase):
         self.assertFalse(self.page.locator("#returnNavigation").is_visible())
         self.assertFalse(self.page.locator('#bands [data-b="3"]').is_visible())
         self.enable_navigation()
+        self.click('#tabs [data-view="menuView"]')
         self.click("#navigationSettings")
+        self.click('#tabs [data-view="walkView"]')
         self.click("#returnNavigation")
         self.assertEqual(self.messages("returnNavigation"), [{"action":"returnNavigation"}])
         self.assertEqual(self.messages("navigationSettings"), [{"action":"navigationSettings"}])
@@ -248,7 +250,7 @@ class WalkBridgeTests(unittest.TestCase):
         self.assertEqual(self.messages("arrived"), [])
         self.send("arrival",session,token=target["id"],placeID=target["placeID"],seen=[target["placeID"]],recent=[target["placeID"]])
         self.page.clock.fast_forward(1800)
-        self.click("#cardNavigationSettings")
+        self.assertTrue(self.page.locator('#veil [role="dialog"]').is_visible())
         self.click("#cardReturnNavigation")
         self.assertEqual(self.messages("returnNavigation")[-1], {"action":"returnNavigation","id":target["id"]})
 
@@ -276,7 +278,7 @@ class WalkBridgeTests(unittest.TestCase):
 
     def test_real_journal_reuses_trip_on_redraw_and_finishes_on_stop(self):
         self.enable_journal()
-        self.assertEqual(self.label("#photoAlbum"), "散步日誌")
+        self.assertEqual(self.label("#photoAlbum"), "散步筆記")
         self.click("#photoAlbum")
         self.assertEqual(self.messages("journal"), [{"action": "journal"}])
         self.assertFalse(self.page.locator("#journalNote").is_visible())
@@ -336,10 +338,14 @@ class WalkBridgeTests(unittest.TestCase):
             self.page.clock.fast_forward(1800)
             self.click("#snap")
             walked = self.messages("walkPhoto")[-1]["visit"]["walked"]
+            receipt = self.messages("arrivalShown")[-1]
+            self.assertEqual(receipt["token"], target["id"])
             if interrupted:
                 self.assertIsNone(walked)
+                self.assertNotIn("walked", receipt)
             else:
                 self.assertGreater(walked, 150)
+                self.assertEqual(receipt["walked"], walked)
             self.click("#again")
 
     def test_journal_denied_real_walk_starts_a_separate_simulated_visit(self):
@@ -453,7 +459,7 @@ class WalkBridgeTests(unittest.TestCase):
                     "name": NANTOU["name"], "date": "2025.12.31", "isSimulated": False, "stop": 1,
                     "walked": None, "area": f"{NANTOU['town']}・{NANTOU['city']}"}}
         self.assertEqual(self.messages("walkPhoto"), [expected, expected])
-        self.assertFalse(self.page.locator("#photoAlbum").is_visible())
+        self.assertTrue(self.page.locator('#veil [role="dialog"]').is_visible())
         self.assertTrue(self.page.evaluate("()=>lukangRenderWalkCard('','other').then(()=>false,()=>true)"))
 
         result = self.page.evaluate("""async id=>{
@@ -529,7 +535,8 @@ class WalkBridgeTests(unittest.TestCase):
         step = self.page.locator("#stepTo")
         visits = []
         for _ in range(2):
-            self.assertFalse(self.page.locator("#photoAlbum").is_visible())
+            self.click("#photoAlbum")
+            self.assertEqual(self.messages("photoAlbum")[-1], {"action": "photoAlbum"})
             step.dispatch_event("pointerdown")
             for _ in range(500):
                 self.page.clock.fast_forward(100)
@@ -674,6 +681,7 @@ class WalkBridgeTests(unittest.TestCase):
         self.assertEqual(self.messages("start"), [])
         self.assertFalse(self.page.locator("#walkrow").is_visible())
         self.assertIn("出發過 4 次", self.label("#sub"))
+        self.click('#tabs [data-view="menuView"]')
         self.click("#credits")
         self.assertEqual(self.messages("credits"), [{"action": "credits"}])
         self.assertEqual(self.page.url, ENTRY)

@@ -20,12 +20,17 @@ LINES = {
 ARRIVED = ("到啦～就是這裡！", "非常開心地歡呼，像跳起來宣布答案。")
 
 
-def main(root):
+def voice_jobs():
     jobs = []
     for ev, (texts, mood) in LINES.items():
         for i, t in enumerate(texts):
             jobs.append({"file": f"{ev}_{i}.mp3", "event": ev, "text": t, "instructions": ROLE + mood})
     jobs.append({"file": "arrived.mp3", "event": "arrived", "text": ARRIVED[0], "instructions": ROLE + ARRIVED[1]})
+    return jobs
+
+
+def main(root):
+    jobs = voice_jobs()
     out = root / "art" / "voice" / "jobs.json"
     out.write_text(json.dumps(jobs, ensure_ascii=False, indent=1), encoding="utf-8")
     print(len(jobs), "句 →", out)

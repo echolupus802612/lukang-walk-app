@@ -14,6 +14,9 @@
     <application android:allowBackup="false" android:usesCleartextTraffic="false"
         android:icon="@mipmap/walk" android:label="散步吧"
         android:theme="@style/WalkTheme">
+        <provider android:name=".WalkCameraProvider"
+            android:authorities="io.github.echolupus802612.lukangwalk.camera"
+            android:exported="false" android:grantUriPermissions="true"/>
         <activity android:name=".WebWalkActivity" android:exported="true"
             android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize"
             android:screenOrientation="portrait">

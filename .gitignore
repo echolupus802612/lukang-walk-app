@@ -1,4 +1,6 @@
 data/raw/
+data/photos.pending/
+data/photos_tw.pending/
 __pycache__/
 *.pyc
 .claude/

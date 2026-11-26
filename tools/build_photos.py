@@ -10,9 +10,11 @@
 每張裁成 16:10、寬 720，存 WebP。原圖下載到 art/photos/raw/（不進版控）。
 data/photos.json 裡 "skip" 列出的編號不配照片（人工看過覺得不對的）。
 """
-import hashlib, io, json, math, re, sys, time, urllib.parse, urllib.request
+import hashlib, json, math, re, sys, time, urllib.parse, urllib.request
 from pathlib import Path
-from PIL import Image, ImageOps
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from photo_files import build_lock, cached_webp, encode_webp, other_ids, PhotoUpdates
 
 W, H = 720, 450
 CENTER = (24.0565, 120.4335)
@@ -67,7 +69,7 @@ def commons_info(title):
                 "https://commons.wikimedia.org/w/api.php?" + q, headers=UA), timeout=60))
             break
         except urllib.error.HTTPError as e:
-            if e.code != 429:
+            if e.code != 429 or attempt == 4:
                 raise
             time.sleep(10 * (attempt + 1))
     ii = list(r["query"]["pages"].values())[0]["imageinfo"][0]
@@ -76,17 +78,13 @@ def commons_info(title):
     return ii["thumburl"], artist, m.get("LicenseShortName", {}).get("value", ""), ii["descriptionurl"]
 
 
-def fetch(url, dest):
-    if dest.exists():
-        return dest.read_bytes()
+def fetch(url):
     q = urllib.request.Request(urllib.parse.quote(url, safe=":/?=&%()"), headers=UA)
-    data = urllib.request.urlopen(q, timeout=60).read()
-    dest.write_bytes(data)
-    return data
+    with urllib.request.urlopen(q, timeout=60) as response:
+        return response.read()
 
 
-def main():
-    root, attr_path = Path(sys.argv[1]), sys.argv[2]
+def build(root, attr_path):
     places = json.loads((root / "data" / "lukang.json").read_text(encoding="utf-8"))
     meta_path = root / "data" / "photos.json"
     meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
@@ -95,7 +93,18 @@ def main():
     raw.mkdir(parents=True, exist_ok=True)
     out.mkdir(parents=True, exist_ok=True)
     boch, attr = candidates(root, attr_path)
-    photos = {}
+    photos = meta.setdefault("photos", {})
+    protected = other_ids(root, "taiwan.json", "photos_tw.json")
+    updates = PhotoUpdates(out, meta_path, meta, photos, meta_path.with_suffix(".pending"), protected, indent=1)
+    active_ids = {str(p["id"]) for p in places if p["id"] not in skip}
+    for pid in active_ids:
+        updates.check_id(pid)
+    updates.recover()
+    previous_ids = set(photos)
+    for pid in previous_ids:
+        if pid not in active_ids or not (out / f"{pid}.webp").is_file():
+            del photos[pid]
+    failures = []
     for p in places:
         if p["id"] in skip:
             continue
@@ -110,7 +119,12 @@ def main():
             pick = (man["credit"], man["url"], man["page"])
             extra = {k: man[k] for k in ("author", "license", "page")}
         elif title:
-            url, artist, lic, page = commons_info(title)
+            try:
+                url, artist, lic, page = commons_info(title)
+            except (OSError, ValueError, KeyError, IndexError) as e:
+                failures.append(p["id"])
+                print(f"{p['id']:3d} {p['name']} 取得照片來源失敗：{e}")
+                continue
             pick = ("Wikimedia Commons", url, title)
             extra = {"author": artist, "license": lic, "page": page}
             time.sleep(1)
@@ -128,27 +142,33 @@ def main():
         credit, url, matched = pick
         try:
             if url is None:
-                data = (raw / "user" / matched).read_bytes()
+                image = encode_webp((raw / "user" / matched).read_bytes(), (W, H), 72)
             else:
                 key = hashlib.md5(url.encode()).hexdigest()[:8]   # 換了來源就重新下載，不會拿到舊圖
-                data = fetch(url, raw / f"{p['id']}_{key}{Path(url).suffix.lower() or '.jpg'}")
-            im = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
-        except Exception as e:  # 網址失效或不是圖片就略過
+                cache = raw / f"{p['id']}_{key}{Path(urllib.parse.urlparse(url).path).suffix.lower() or '.jpg'}"
+                image = cached_webp(cache, lambda: fetch(url), (W, H), 72)
+        except Exception as e:
+            failures.append(p["id"])
             print(f"{p['id']:3d} {p['name']} 下載失敗：{e}")
             continue
-        ImageOps.fit(im, (W, H), Image.LANCZOS, centering=(0.5, 0.45)).save(out / f"{p['id']}.webp", "WEBP", quality=72, method=6)
-        photos[str(p["id"])] = {"credit": credit, "url": url, "matched": matched, **extra}
+        updates.install(str(p["id"]), {"credit": credit, "url": url, "matched": matched, **extra}, image)
         print(f"{p['id']:3d} {p['name']} ← {credit}（{matched}）")
-    # 清掉已不再配照片的舊檔
-    for f in out.glob("*.webp"):
-        if f.stem not in photos:
-            f.unlink()
-    meta = {"_note": meta.get("_note", "地點照片出處（build_photos.py 產生）；skip＝人工排除、不配照片的編號"),
-            "skip": meta.get("skip", {}), "commons": meta.get("commons", {}), "manual": meta.get("manual", {}),
-            "photos": photos}
-    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
-    kb = sum(f.stat().st_size for f in out.glob("*.webp")) // 1024
+    # 只清理由鹿港清單管理且已下架或明確排除的編號。全臺照片共用這個目錄。
+    for pid in previous_ids - active_ids - protected:
+        if re.fullmatch(r"[0-9]+", pid):
+            (out / f"{pid}.webp").unlink(missing_ok=True)
+    meta.setdefault("_note", "地點照片出處（build_photos.py 產生）；skip＝人工排除、不配照片的編號")
+    updates.checkpoint()
+    kb = sum((out / f"{pid}.webp").stat().st_size for pid in photos) // 1024
     print(f"共 {len(photos)} 張，{kb} KB")
+    if failures:
+        raise SystemExit(f"{len(failures)} 處照片未能更新；既有照片與出處已保留。")
+
+
+def main():
+    root = Path(sys.argv[1])
+    with build_lock(root):
+        build(root, sys.argv[2])
 
 
 if __name__ == "__main__":

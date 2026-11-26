@@ -3,7 +3,7 @@ name: Build and test iOS
 on:
   push:
     branches: [main]
-    paths: ['ios/**', 'src/**', 'docs/**', 'data/**', 'tools/build_page.py', 'tools/build_ios_credits.py', 'tools/test_walk_place_report.swift', '.github/workflows/ios-build.yml']
+    paths: ['ios/**', 'src/**', 'docs/**', 'data/**', 'tools/build_page.py', 'tools/build_ios_credits.py', 'tools/test_walk_*.swift', 'tools/test_ios_bridge.py', '.github/workflows/ios-build.yml']
   workflow_dispatch:
     inputs:
       mode:
@@ -17,10 +17,26 @@ permissions:
 
 concurrency:
   # 只編譯打包另成一組，不會取消正在跑的完整測試。
-  group: lukang-walk-app-ios-${{ inputs.mode == 'package' && 'package' || 'full' }}
+  group: lukang-walk-app-ios-${{ github.ref }}-${{ inputs.mode == 'package' && 'package' || 'full' }}
   cancel-in-progress: true
 
 jobs:
+  webkit:
+    if: ${{ inputs.mode != 'package' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - name: 安裝桌面 WebKit 測試環境
+        run: |
+          python3 -m venv "$RUNNER_TEMP/walk-webkit"
+          "$RUNNER_TEMP/walk-webkit/bin/python" -m pip install playwright==1.49.1
+          "$RUNNER_TEMP/walk-webkit/bin/python" -m playwright install --with-deps webkit
+      - name: 驗證實際打包頁面的 iPhone 橋接流程
+        run: '"$RUNNER_TEMP/walk-webkit/bin/python" tools/test_ios_bridge.py'
+
   build:
     runs-on: macos-15
     timeout-minutes: 40
@@ -43,7 +59,7 @@ jobs:
 
       - name: 驗證散步日誌儲存與舊版資料遷移
         run: |
-          xcrun swiftc -parse-as-library ios/LukangWalk/WalkJournalStore.swift tools/test_walk_journal.swift -o "$RUNNER_TEMP/test-walk-journal"
+          xcrun swiftc -parse-as-library ios/LukangWalk/{WalkJournalStore,WalkPhotoVisit,WalkProgress}.swift tools/test_walk_journal.swift -o "$RUNNER_TEMP/test-walk-journal"
           "$RUNNER_TEMP/test-walk-journal"
 
       - name: 驗證回程地點及到站設定

@@ -2,7 +2,9 @@ package io.github.echolupus802612.lukangwalk;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -14,10 +16,13 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JsResult;
+import android.webkit.JsPromptResult;
+import android.webkit.ValueCallback;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -33,6 +38,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
@@ -52,6 +58,11 @@ public final class WebWalkActivity extends Activity {
     private TextView noticeText;
     private Button applyUpdate;
     private WebView game;
+    private AlertDialog credits, photoMenu;
+    private ValueCallback<Uri[]> photoAnswer;
+    private File cameraFile, deliveredPhoto;
+    private int photoRequest, nextPhotoRequest;
+    private WalkPhotoExport photoExport;
     private View panel;
     private TextView downloadText;
     private ProgressBar downloadBar;
@@ -96,6 +107,11 @@ public final class WebWalkActivity extends Activity {
         notice.addView(applyUpdate);
         window.addView(notice, new LinearLayout.LayoutParams(-1, -2));
         setContentView(window);
+        nextPhotoRequest = state == null ? 100 : state.getInt("nextPhotoRequest", 100);
+        photoRequest = state == null ? -1 : state.getInt("pendingPhotoRequest", -1);
+        cameraFile = state == null ? null : WalkCameraProvider.restore(this, state.getString("cameraFile"));
+        photoExport = new WalkPhotoExport(this, state);
+        WalkCameraProvider.clearExpired(this, state == null ? null : state.getString("cameraFile"), photoExport.retainedName());
         network = getSystemService(ConnectivityManager.class);
         cache = new OfflineWebCache(getApplicationContext());
         prepare();
@@ -208,7 +224,7 @@ public final class WebWalkActivity extends Activity {
     }
 
     private void offerApply(boolean fromButton) {
-        if (pending == null || game == null) return;
+        if (pending == null || game == null || credits != null || photoAnswer != null) return;
         game.evaluateJavascript("Boolean(document.getElementById('go')?.offsetWidth"
                 + " && !document.getElementById('go').disabled"
                 + " && !document.querySelector('.veil.on'))", result -> {
@@ -351,6 +367,26 @@ public final class WebWalkActivity extends Activity {
     }
 
     private final class Permissions extends WebChromeClient {
+        @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> answer, FileChooserParams params) {
+            if (view != game || !isGame(view.getUrl()) || params.getMode() != FileChooserParams.MODE_OPEN
+                    || photoRequest >= 100 || !java.util.Arrays.asList(params.getAcceptTypes()).contains("image/*")) return false;
+            closePhotoChooser();
+            photoAnswer = answer;
+            photoMenu = new AlertDialog.Builder(WebWalkActivity.this).setTitle("拍一張留念")
+                    .setItems(new String[] {"拍照", "從相簿選照片"}, (dialog, item) -> choosePhoto(item == 0))
+                    .setNegativeButton("取消", (dialog, which) -> finishPhoto(null))
+                    .setOnCancelListener(dialog -> finishPhoto(null)).create();
+            photoMenu.show();
+            return true;
+        }
+
+        @Override public boolean onJsPrompt(WebView view, String url, String message, String value, JsPromptResult result) {
+            if (view != game || !isGame(url) || !isGame(view.getUrl()) || !photoExport.accepts(view, message))
+                return super.onJsPrompt(view, url, message, value, result);
+            result.confirm(photoExport.prepare(value) ? "ok" : "");
+            return true;
+        }
+
         @Override public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
             if (view != game || !isGame(url) || !LOCATION_NOTICE.equals(message)) {
                 return super.onJsAlert(view, url, message, result);
@@ -366,6 +402,97 @@ public final class WebWalkActivity extends Activity {
             }
             checkLocation(allowed -> answer.invoke(origin, allowed && game != null && isGame(game.getUrl()), false));
         }
+    }
+
+    private void choosePhoto(boolean camera) {
+        photoMenu = null;
+        photoRequest = nextPhotoRequest++;
+        if (nextPhotoRequest > 60000) nextPhotoRequest = 100;
+        try {
+            Intent intent;
+            if (camera) {
+                cameraFile = WalkCameraProvider.create(this, false);
+                Uri output = WalkCameraProvider.uri(cameraFile);
+                intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE).putExtra(MediaStore.EXTRA_OUTPUT, output);
+                intent.setClipData(ClipData.newRawUri("散步照片", output));
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            } else {
+                intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                        .setType("image/*");
+            }
+            startActivityForResult(intent, photoRequest);
+        } catch (IOException | ActivityNotFoundException | SecurityException unavailable) {
+            finishPhoto(null);
+            Toast.makeText(this, camera ? "無法開啟相機，也可以從相簿選照片。" : "無法開啟照片選擇器。",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request == WalkPhotoExport.REQUEST) { photoExport.result(result, data); return; }
+        if (request != photoRequest || request < 100) return;
+        if (photoAnswer == null) {
+            if (result == RESULT_OK && cameraFile != null && cameraFile.length() > 0) {
+                revokeUriPermission(WalkCameraProvider.uri(cameraFile),
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                File recovered = cameraFile;
+                cameraFile = null;
+                photoExport.recover(recovered);
+            } else if (result == RESULT_OK) {
+                Toast.makeText(this, cameraFile == null ? "散步畫面已重新開啟，請重新選取相簿中的照片。"
+                        : "相機未能提供這次拍攝的照片。", Toast.LENGTH_LONG).show();
+            }
+            finishPhoto(null);
+            return;
+        }
+        Uri picked = null;
+        if (result == RESULT_OK) {
+            if (cameraFile != null) {
+                if (cameraFile.length() > 0) picked = WalkCameraProvider.uri(cameraFile);
+            } else if (data != null && data.getData() != null) {
+                Uri document = data.getData();
+                if ("content".equals(document.getScheme()) && !WalkCameraProvider.AUTHORITY.equals(document.getAuthority())) {
+                    try {
+                        String type = getContentResolver().getType(document);
+                        if (type != null && type.startsWith("image/")) picked = document;
+                    } catch (RuntimeException ignored) { /* 來源已無法提供這張照片。 */ }
+                }
+            }
+            if (picked == null) Toast.makeText(this, "讀不到這張照片，請再選一次。", Toast.LENGTH_LONG).show();
+        }
+        finishPhoto(picked);
+    }
+
+    private void finishPhoto(Uri picked) {
+        ValueCallback<Uri[]> answer = photoAnswer;
+        photoAnswer = null;
+        photoMenu = null;
+        photoRequest = -1;
+        if (cameraFile != null) {
+            revokeUriPermission(WalkCameraProvider.uri(cameraFile),
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            if (picked == null) cameraFile.delete();
+            else {
+                if (deliveredPhoto != null) deliveredPhoto.delete();
+                deliveredPhoto = cameraFile;
+            }
+            cameraFile = null;
+        }
+        if (answer != null) answer.onReceiveValue(picked == null ? null : new Uri[] {picked});
+    }
+
+    private void closePhotoChooser() {
+        if (photoMenu != null) photoMenu.dismiss();
+        finishPhoto(null);
+    }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        super.onSaveInstanceState(state);
+        state.putInt("nextPhotoRequest", nextPhotoRequest);
+        state.putInt("pendingPhotoRequest", photoRequest);
+        if (cameraFile != null) state.putString("cameraFile", cameraFile.getName());
+        photoExport.save(state);
     }
 
     private final class Navigation extends WebViewClient {
@@ -398,13 +525,12 @@ public final class WebWalkActivity extends Activity {
         @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             Uri uri = request.getUrl();
             if (!request.isForMainFrame()) return true;
-            if (isGame(uri.toString())) return false;
-            if (request.hasGesture() && "https".equals(uri.getScheme()) && uri.getHost() != null) {
-                try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE));
-                } catch (ActivityNotFoundException e) {
-                    Toast.makeText(WebWalkActivity.this, "找不到能開啟連結的瀏覽器。", Toast.LENGTH_SHORT).show();
-                }
+            if (view == game && isGame(uri.toString())) return false;
+            if (isSite(uri) && (WebRelease.BASE_PATH + "credits.html").equals(uri.getEncodedPath())) {
+                if (view != game) return false;
+                if (request.hasGesture()) showCredits(uri, snapshot);
+            } else if (request.hasGesture()) {
+                openExternal(uri);
             }
             return true;
         }
@@ -416,7 +542,9 @@ public final class WebWalkActivity extends Activity {
             if (view == game && request.isForMainFrame() && response.getStatusCode() >= 400) connectionError();
         }
         @Override public void onPageFinished(WebView view, String url) {
-            if (view != game || pageFailed || !isGame(url) || locationAsked || has(Manifest.permission.ACCESS_COARSE_LOCATION)) return;
+            if (view != game || pageFailed || !isGame(url)) return;
+            photoExport.install(view);
+            if (locationAsked || has(Manifest.permission.ACCESS_COARSE_LOCATION)) return;
             // 保留第一次出發的點擊，讓定位逾時從玩家回答系統權限後才開始計算。
             view.evaluateJavascript("(() => {const b=document.getElementById('go');"
                     + "if (!b || b.dataset.androidPermission || location.hash==='#sim') return;"
@@ -426,14 +554,47 @@ public final class WebWalkActivity extends Activity {
         }
         @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
             if (view == game) {
+                detachPhotoPage();
+                photoExport.forgetPage();
                 game = null;
                 finishPermission(false);
                 frame.removeView(view);
                 view.destroy();
                 connectionError();
-            }
+            } else if (credits != null) credits.dismiss();
             return true;
         }
+    }
+
+    private void openExternal(Uri uri) {
+        boolean email = "mailto".equalsIgnoreCase(uri.getScheme());
+        if (!email && !("https".equals(uri.getScheme()) && uri.getHost() != null)) return;
+        Intent intent = new Intent(email ? Intent.ACTION_SENDTO : Intent.ACTION_VIEW, uri);
+        if (!email) intent.addCategory(Intent.CATEGORY_BROWSABLE);
+        try { startActivity(intent); }
+        catch (ActivityNotFoundException | SecurityException unavailable) {
+            Toast.makeText(this, email ? "找不到能寄送意見的電子郵件 App。" : "找不到能開啟連結的瀏覽器。",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void showCredits(Uri uri, OfflineWebCache.Snapshot snapshot) {
+        if (credits != null || !active()) return;
+        WebView page = new WebView(this);
+        page.getSettings().setAllowFileAccess(false);
+        page.getSettings().setAllowContentAccess(false);
+        page.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
+        page.setWebViewClient(new Navigation(snapshot));
+        credits = new AlertDialog.Builder(this).setTitle("資料來源與授權").setView(page)
+                .setPositiveButton("返回散步", null).create();
+        credits.setOnDismissListener(dialog -> {
+            credits = null;
+            if (page.getParent() instanceof android.view.ViewGroup)
+                ((android.view.ViewGroup)page.getParent()).removeView(page);
+            page.destroy();
+        });
+        credits.show();
+        page.loadUrl(uri.toString());
     }
 
     private void connectionError() {
@@ -514,14 +675,28 @@ public final class WebWalkActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (game != null) game.onResume();
+        photoExport.offerRecovery();
         if (pending != null) offerApply(false);
     }
+    private void detachPhotoPage() {
+        // 外部相機仍可能在寫入。新頁面收到結果時可以保留照片，不能把它交給另一趟散步。
+        if (photoRequest >= 100 && !isFinishing()) {
+            ValueCallback<Uri[]> answer = photoAnswer;
+            photoAnswer = null;
+            if (answer != null) answer.onReceiveValue(null);
+        } else closePhotoChooser();
+    }
+
     private void disposeGame() {
+        detachPhotoPage();
+        photoExport.forgetPage();
+        if (credits != null) credits.dismiss();
         if (game != null) {
             frame.removeView(game);
             game.destroy();
             game = null;
         }
+        if (deliveredPhoto != null) { deliveredPhoto.delete(); deliveredPhoto = null; }
     }
     @Override protected void onDestroy() {
         finishPermission(false);
@@ -529,6 +704,7 @@ public final class WebWalkActivity extends Activity {
         worker.shutdownNow();
         main.removeCallbacks(hideNotice);
         disposeGame();
+        photoExport.close(isFinishing());
         if (displayed != null) displayed.close();
         if (pending != null) pending.close();
         super.onDestroy();

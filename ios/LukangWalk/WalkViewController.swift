@@ -150,6 +150,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
             haptics?.stop(completionHandler: nil)
             haptics = nil
         } else {
+            journal.retryPendingStops()
             restorePage()
         }
     }
@@ -332,9 +333,10 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
                     }
                     return
                 }
-                if entry.status != .arrived {
+                let walked = progress.pendingArrival?.distanceIncomplete == true ? nil : body["walked"] as? Double
+                if entry.status != .arrived || (entry.walked == nil && walked != nil) {
                     try journal.finish(id: token, status: .arrived, date: progress.pendingArrival?.date,
-                                       stop: progress.visitedPlaces.real.count)
+                                       stop: progress.visitedPlaces.real.count, walked: walked)
                 }
                 try progress.acknowledgeArrival(token)
                 if deferredReturnArrivalToken == token { deferredReturnArrivalToken = nil }
@@ -532,13 +534,16 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
 
     private func endTrip(id: String, status: WalkJournalStore.Status, date: String? = nil,
                          stop: Int? = nil, walked: Double? = nil) {
-        do { try journal.finish(id: id, status: status, date: date, stop: stop, walked: walked) }
+        do {
+            if status == .stopped { try journal.stop(id: id, stop: stop, walked: walked) }
+            else { try journal.finish(id: id, status: status, date: date, stop: stop, walked: walked) }
+        }
         catch { send(["type": "storeError"]) }
         if activeTrip?.id == id { activeTrip = nil }
     }
 
     private func prepareJournal() async throws {
-        if journalPrepared { return }
+        if journalPrepared && !journal.needsMigration { return }
         if let journalPreparation { try await journalPreparation.value; return }
         let task = Task { try await self.importPreviousWalks() }
         journalPreparation = task
@@ -607,6 +612,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
 
     private func openJournal(showing id: String?) {
         guard canPresentWalk, presentedViewController == nil else { return }
+        journal.retryPendingStops()
         Task {
             do {
                 try await prepareJournal()
@@ -628,7 +634,8 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         // 途中、中斷與收工的行程都不會從相機標題或透卡透露未揭曉的地點。
         let title = entry.status == .arrived ? entry.name : "散步途中"
         let visit = WalkPhotoAlbum.Visit(id: UUID().uuidString, placeID: entry.placeID, name: title,
-                                         date: entry.date, isSimulated: entry.isSimulated, tripID: entry.id)
+                                         date: entry.date, isSimulated: entry.isSimulated, tripID: entry.id,
+                                         wasEnRoute: entry.status != .arrived)
         var snapshot: [String: Any] = ["id": id, "status": entry.status.rawValue, "name": title,
                                        "date": entry.date, "placeID": entry.placeID]
         if let stop = entry.stop { snapshot["stop"] = stop }
@@ -658,7 +665,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
               let name = fields["name"] as? String, !name.isEmpty,
               let date = fields["date"] as? String, let simulated = fields["isSimulated"] as? Bool else { return }
         let visit = WalkPhotoAlbum.Visit(id: UUID().uuidString, placeID: placeID, name: name, date: date,
-                                         isSimulated: simulated, tripID: id)
+                                         isSimulated: simulated, tripID: id, wasEnRoute: false)
         let originalPage = pageGeneration
         let capture = WalkPhotoCaptureController(place: name, save: { [weak self] photo in
             guard let self else { throw CocoaError(.userCancelled) }
