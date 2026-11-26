@@ -83,6 +83,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 .card p{font:400 17px/1.6 "LXGW WenKai TC",serif;text-align:start;margin:16px 0 4px}
 .card button{width:100%;margin-top:16px;background:#9a3a27;color:#fbf3e6;border:0}
 .card button.snap{background:none;color:#9a3a27;border:2px solid #9a3a27;margin-top:12px}
+.card button.report{background:transparent;color:var(--cardink);font-size:14px;text-decoration:underline;margin-top:4px}
 /* 分享透卡預覽 */
 #sharev{z-index:6}
 .share img{display:block;width:100%;max-height:62dvh;object-fit:contain;margin:0 auto}
@@ -152,6 +153,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   <button id="visitNote" class="snap" hidden>這趟的筆記</button>
   <div class="navlinks" id="cardNavlinks" hidden><button id="cardReturnNavigation" class="snap">帶我回去</button><button id="cardNavigationSettings" class="snap">導航設定</button></div>
   <button id="again">再走一趟</button>
+  <button id="reportPlace" class="report" hidden>回報地點問題</button>
 </div></div>
 
 <div class="veil" id="sharev"><div class="card share" role="dialog" aria-modal="true" aria-label="分享透卡">
@@ -200,6 +202,7 @@ const native = window.webkit?.messageHandlers?.lukangWalk;
 const backgroundWalk = !!native && window.lukangBackgroundWalk === true;
 const nativePhotos = !!native && window.lukangWalkPhotos === true;
 const nativeJournal = !!native && window.lukangWalkJournal === true;
+const nativePlaceReporting = !!native && window.lukangPlaceReporting === true;
 const navigation=!!native && !!window.lukangNavigation && typeof window.lukangNavigation==='object';
 const navPrefs={hideDistance:false,arrivalRadius:0,hasReturnPoint:false};
 let endedForReturn=0;
@@ -546,6 +549,7 @@ function showArrival(t,count,visitID,arrivalDate){
   $('walkrow').hidden=true; $('sim').classList.remove('on');
   $('photoAlbum').hidden=true;
   $('journalNote').hidden=true; $('visitNote').hidden=!nativeJournal || !visitID;
+  $('reportPlace').hidden=!(nativePlaceReporting && !S.sim && visitID && visitID===presentingToken);
   $('go').disabled=false;
   document.querySelector('.app').inert=true;
   say('arrived');
@@ -572,6 +576,7 @@ function reset(){
   document.querySelector('.app').inert=false;
   $('veil').classList.remove('on'); S.phase='ready'; S.target=null; S.offer=null;
   S.memo=null; tripID=null; previousLegs=0;
+  $('reportPlace').hidden=true;
   $('photoAlbum').hidden=!(nativePhotos || nativeJournal); $('journalNote').hidden=true; $('visitNote').hidden=true;
   $('bands').hidden=false; $('go').hidden=false; $('go').textContent='再走一趟'; $('walkrow').hidden=true;
   $('distanceHint').hidden=true; $('dist').classList.remove('masked','pressable');
@@ -817,6 +822,12 @@ $('stop').onclick = ()=>{ say('bye'); act('bye', 3200);
   if (!S.forcedSim){ S.sim = false; $('foot').textContent = ''; }
   reset(); $('go').textContent = '出門散步吧'; $('mode').textContent = S.sim ? '模擬行走' : '已收工'; };
 $('again').onclick = ()=>{ reset(); $('go').focus(); };
+if (nativePlaceReporting){
+  $('reportPlace').onclick=()=>{
+    if ($('reportPlace').hidden || !$('veil').classList.contains('on') || S.phase!=='arrived' || !S.memo) return;
+    native.postMessage({action:'reportPlace',placeID:S.memo.placeID,visitID:S.memo.id});
+  };
+}
 
 /* ---------- 拍一張留念：在手機上將相片與這一趟的地點、日期繪成透卡 ---------- */
 if (native || typeof renderShareCard !== 'function') $('snap').hidden = true;

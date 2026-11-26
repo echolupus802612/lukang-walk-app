@@ -122,6 +122,48 @@ class WalkBridgeTests(unittest.TestCase):
         self.page.add_init_script("window.lukangNavigation={hideDistance:false,arrivalRadius:0,hasReturnPoint:false};")
         self.enable_journal()
 
+    def test_place_report_uses_the_visible_real_arrival(self):
+        self.enable_navigation()
+        token = "3a8ec4a9-2694-47bd-9dc0-034bcb790694"
+        event = dict(placeID=NANTOU["id"], token=token, seen=[NANTOU["id"]], recent=[NANTOU["id"]])
+        report = self.page.locator("#reportPlace")
+        self.send("arrival", 73, **event)
+        self.page.clock.fast_forward(1800)
+        self.assertTrue(self.page.locator("#veil").is_visible())
+        self.assertTrue(report.is_hidden(), "舊版 iPhone 的到站卡應隱藏回報入口")
+
+        self.page.add_init_script("window.lukangPlaceReporting=true;")
+        self.page.reload(wait_until="domcontentloaded")
+        self.assertTrue(report.is_hidden())
+        self.send("arrival", 73, **event)
+        report.evaluate("button => button.click()")
+        self.assertEqual(self.messages("reportPlace"), [], "地點尚未揭曉")
+        self.page.clock.fast_forward(1800)
+        self.send("arrival", 73, **event)
+        self.click("#reportPlace")
+        self.assertEqual(self.messages("reportPlace"), [
+            {"action": "reportPlace", "placeID": NANTOU["id"], "visitID": token}
+        ])
+        self.assertEqual(self.label("#cname"), NANTOU["name"])
+        self.click("#again")
+        self.send("arrival", 73, **event)
+        self.page.clock.fast_forward(1800)
+        self.assertTrue(report.is_hidden(), "看過的到站通知不應再次打開回報入口")
+        report.evaluate("button => button.click()")
+        self.assertEqual(len(self.messages("reportPlace")), 1)
+
+        session = self.start()
+        self.fix(session, ORIGIN)
+        target = self.messages("target")[-1]
+        self.assertTrue(report.is_hidden())
+        self.send("arrival", session, token=target["id"], placeID=target["placeID"],
+                  seen=[NANTOU["id"], target["placeID"]], recent=[target["placeID"], NANTOU["id"]])
+        self.page.clock.fast_forward(1800)
+        self.click("#reportPlace")
+        self.assertEqual(self.messages("reportPlace")[-1], {
+            "action": "reportPlace", "placeID": target["placeID"], "visitID": target["id"]
+        })
+
     def test_return_navigation_discards_old_callbacks_and_keeps_new_sensor_owner(self):
         self.assertFalse(self.page.locator("#returnNavigation").is_visible())
         self.assertFalse(self.page.locator('#bands [data-b="3"]').is_visible())
@@ -333,6 +375,7 @@ class WalkBridgeTests(unittest.TestCase):
             self.click("#again")
 
     def test_journal_denied_real_walk_starts_a_separate_simulated_visit(self):
+        self.page.add_init_script("window.lukangPlaceReporting=true;")
         self.enable_journal()
         session = self.start()
         self.fix(session, ORIGIN, age=800)
@@ -354,6 +397,10 @@ class WalkBridgeTests(unittest.TestCase):
         self.page.clock.fast_forward(1800)
         arrived = self.messages("journalFinish")[-1]
         self.assertEqual((arrived["id"],arrived["status"],arrived["stop"]), (simulation["id"],"arrived",1))
+        report = self.page.locator("#reportPlace")
+        self.assertTrue(report.is_hidden())
+        report.evaluate("button => button.click()")
+        self.assertEqual(self.messages("reportPlace"), [])
         self.click("#visitNote")
         self.assertEqual(self.messages("journal")[-1]["id"], simulation["id"])
         self.click("#snap")

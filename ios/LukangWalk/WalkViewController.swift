@@ -127,7 +127,8 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         let nav = (try? JSONSerialization.data(withJSONObject: navigationValues))
             .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
         scripts.addUserScript(WKUserScript(source: progress.initialScript + Self.photoScript
-                                           + "window.lukangWalkJournal = true;window.lukangNavigation = " + nav + ";",
+                                           + "window.lukangWalkJournal = true;window.lukangPlaceReporting = true;"
+                                           + "window.lukangNavigation = " + nav + ";",
                                            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         var entry = index
         #if DEBUG
@@ -305,6 +306,9 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
             endTrip(id: id, status: status, stop: body["stop"] as? Int, walked: body["walked"] as? Double)
         case "journal":
             openJournal(showing: body["id"] as? String)
+        case "reportPlace":
+            guard let visitID = body["visitID"] as? String, let placeID = body["placeID"] as? Int else { return }
+            openPlaceReport(visitID: visitID, placeID: placeID)
         case "arrivalShown":
             guard canPresentWalk, let token = body["token"] as? String, progress.pendingArrival?.token == token else { return }
             do {
@@ -548,6 +552,23 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
                                 place: { places[$0] })
         }
         previousReceipt = nil
+    }
+
+    private func openPlaceReport(visitID: String, placeID: Int) {
+        guard canPresentWalk, presentedViewController == nil else { return }
+        let generation = pageGeneration
+        Task {
+            do {
+                try await prepareJournal()
+                guard generation == pageGeneration, canPresentWalk, presentedViewController == nil,
+                      let entry = try journal.entry(id: visitID), entry.status == .arrived,
+                      !entry.isSimulated, entry.placeID == placeID else { return }
+                let report = WalkPlaceReportViewController(placeID: entry.placeID, placeName: entry.name)
+                present(UINavigationController(rootViewController: report), animated: true)
+            } catch {
+                send(["type": "storeError"])
+            }
+        }
     }
 
     private func openJournal(showing id: String?) {

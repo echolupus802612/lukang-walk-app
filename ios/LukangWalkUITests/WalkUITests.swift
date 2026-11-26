@@ -271,6 +271,90 @@ final class WalkUITests: XCTestCase {
     }
 
     @MainActor
+    func testPlaceReportFromRealArrivalPreparesPrivateEmailAndCanBeClosed() {
+        let previousLocation = XCUIDevice.shared.location
+        defer { XCUIDevice.shared.location = previousLocation }
+        // 在雙龍瀑布七彩吊橋以北約 222 公尺出發，附近只有這個候選地點。
+        let start = CLLocationCoordinate2D(latitude: 23.78369, longitude: 120.94512)
+        setLocation(start)
+        let app = XCUIApplication()
+        app.launch()
+        startGPSWalk(app, at: start)
+        let game = app.webViews.firstMatch
+        let report = game.buttons["回報地點問題"]
+        XCTAssertFalse(report.exists, "實際抵達前要保留目的地的驚喜")
+        setLocation(.init(latitude: 23.78178, longitude: start.longitude))
+        Thread.sleep(forTimeInterval: 1.2)
+        setLocation(.init(latitude: 23.78165, longitude: start.longitude))
+        XCTAssertTrue(report.waitForExistence(timeout: 15))
+        report.tap()
+
+        let close = app.buttons["walkReportClose"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8))
+        let place = app.staticTexts["walkReportPlace"].label
+        XCTAssertTrue(place.contains("雙龍瀑布七彩吊橋") && place.contains("1012"))
+        XCTAssertTrue(app.staticTexts["walkReportRecipient"].label.contains("echolupus802612@gmail.com"))
+        let prepare = app.buttons["walkReportPrepare"]
+        XCTAssertFalse(prepare.isEnabled, "應由使用者選擇回報原因")
+        app.buttons["walkReportReason0"].tap()
+        XCTAssertTrue(prepare.isEnabled)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "回報地點問題與郵件收件人"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        app.buttons["walkReportReason3"].tap()
+        XCTAssertFalse(prepare.isEnabled, "選擇「其他」時須填寫現場狀況")
+        let note = app.textViews["walkReportNote"]
+        note.tap()
+        note.typeText("  ")
+        XCTAssertFalse(prepare.isEnabled)
+        note.typeText("Entrance check (test only).")
+        XCTAssertTrue(prepare.isEnabled)
+        app.buttons["walkReportEndEditing"].tap()
+
+        if !prepare.isHittable { app.swipeUp() }
+        prepare.tap()
+        let status = app.staticTexts["walkReportStatus"]
+        let mail = XCUIApplication(bundleIdentifier: "com.apple.mobilemail")
+        if mail.wait(for: .runningForeground, timeout: 4) {
+            app.activate()
+            XCTAssertTrue(close.waitForExistence(timeout: 8))
+            XCTAssertTrue(status.label.contains("已開啟郵件 App"))
+        } else {
+            let unavailable = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "找不到可開啟的郵件 App")).firstMatch
+            if !unavailable.waitForExistence(timeout: 4) {
+                let cancel = app.buttons.matching(NSPredicate(format: "label IN %@", ["Cancel", "取消"])).firstMatch
+                XCTAssertTrue(cancel.waitForExistence(timeout: 5), "撰寫郵件後應可檢查信件並取消，或顯示郵件服務不可用")
+                cancel.tap()
+                let deleteDraft = app.buttons.matching(NSPredicate(format: "label IN %@", ["Delete Draft", "刪除草稿"])).firstMatch
+                if deleteDraft.waitForExistence(timeout: 2) { deleteDraft.tap() }
+                XCTAssertTrue(status.waitForExistence(timeout: 5))
+                XCTAssertTrue(status.label.contains("已取消寄送"))
+            }
+        }
+        XCTAssertTrue((note.value as? String)?.contains("Entrance check (test only).") == true)
+        let copy = app.buttons["walkReportCopy"]
+        if !copy.isHittable { app.swipeUp() }
+        copy.tap()
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertEqual(status.label, "已複製完整回報。")
+        close.tap()
+        XCTAssertTrue(report.waitForExistence(timeout: 8))
+        XCTAssertTrue(game.buttons["再走一趟"].exists)
+        report.tap()
+        XCTAssertTrue(close.waitForExistence(timeout: 8))
+        XCTAssertTrue((note.value as? String)?.contains("Entrance check (test only).") == true)
+        XCTAssertTrue(prepare.isEnabled, "重新開啟同一地點時仍能檢查草稿再決定是否寄出")
+        let discard = app.buttons["walkReportDiscard"]
+        if !discard.isHittable { app.swipeUp() }
+        discard.tap()
+        app.alerts.buttons["清除"].tap()
+        XCTAssertFalse(prepare.isEnabled)
+        close.tap()
+    }
+
+    @MainActor
     private func openJournal(_ app: XCUIApplication) {
         let button = app.webViews.firstMatch.buttons["散步日誌"]
         XCTAssertTrue(button.waitForExistence(timeout: 15))

@@ -3,7 +3,7 @@ name: Build and test iOS
 on:
   push:
     branches: [main]
-    paths: ['ios/**', 'src/**', 'docs/**', 'data/**', 'tools/build_page.py', 'tools/build_ios_credits.py', '.github/workflows/ios-build.yml']
+    paths: ['ios/**', 'src/**', 'docs/**', 'data/**', 'tools/build_page.py', 'tools/build_ios_credits.py', 'tools/test_walk_place_report.swift', '.github/workflows/ios-build.yml']
   workflow_dispatch:
 
 permissions:
@@ -43,6 +43,11 @@ jobs:
         run: |
           xcrun swiftc -parse-as-library ios/LukangWalk/WalkNavigationPreferences.swift tools/test_walk_navigation.swift -o "$RUNNER_TEMP/test-walk-navigation"
           "$RUNNER_TEMP/test-walk-navigation"
+
+      - name: 驗證地點回報的收件人與郵件內容
+        run: |
+          xcrun swiftc -parse-as-library ios/LukangWalk/WalkPlaceReportMessage.swift tools/test_walk_place_report.swift -o "$RUNNER_TEMP/test-walk-place-report"
+          "$RUNNER_TEMP/test-walk-place-report"
 
       - name: Select an available iPhone
         run: |
