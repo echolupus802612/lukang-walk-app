@@ -27,8 +27,8 @@ final class WalkPlaceReportViewController: UIViewController, UITextViewDelegate,
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
-        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "關閉", style: .done,
+        WalkTheme.paint(view)
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "關閉", style: .plain,
                                                              target: self, action: #selector(closeForm))
         navigationItem.rightBarButtonItem?.accessibilityIdentifier = "walkReportClose"
 
@@ -53,20 +53,19 @@ final class WalkPlaceReportViewController: UIViewController, UITextViewDelegate,
             stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -40)
         ])
 
-        let place = label("\(placeName)（#\(placeID)）", style: .title2)
+        let place = label("\(placeName)（#\(placeID)）", font: WalkTheme.kai(26, bold: true, style: .title2))
         place.accessibilityIdentifier = "walkReportPlace"
         stack.addArrangedSubview(place)
-        let recipient = label("收件人　\(WalkPlaceReportMessage.recipient)", style: .subheadline)
+        let recipient = label("收件人　\(WalkPlaceReportMessage.recipient)",
+                              font: WalkTheme.sans(14, weight: .regular, style: .subheadline), color: WalkTheme.soft)
         recipient.accessibilityIdentifier = "walkReportRecipient"
         stack.addArrangedSubview(recipient)
         stack.setCustomSpacing(20, after: recipient)
 
-        stack.addArrangedSubview(label("回報原因", style: .headline))
+        stack.addArrangedSubview(label("回報原因", font: WalkTheme.kai(18, bold: true, style: .headline)))
         for (index, reason) in Self.reasons.enumerated() {
             let button = UIButton(type: .system)
-            button.configuration = .plain()
-            button.configuration?.title = reason
-            button.configuration?.imagePadding = 10
+            WalkTheme.dress(button, .outline, title: reason)
             button.contentHorizontalAlignment = .leading
             button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
             button.accessibilityIdentifier = "walkReportReason\(index)"
@@ -79,34 +78,40 @@ final class WalkPlaceReportViewController: UIViewController, UITextViewDelegate,
             stack.addArrangedSubview(button)
         }
 
-        stack.addArrangedSubview(label("補充說明", style: .headline))
-        note.font = .preferredFont(forTextStyle: .body)
+        stack.setCustomSpacing(18, after: reasonButtons[reasonButtons.count - 1])
+        stack.addArrangedSubview(label("補充說明", font: WalkTheme.kai(18, bold: true, style: .headline)))
+        note.font = WalkTheme.kai(18, style: .body)
         note.adjustsFontForContentSizeCategory = true
-        note.backgroundColor = .secondarySystemBackground
-        note.layer.cornerRadius = 8
+        note.backgroundColor = WalkTheme.card
+        note.textColor = WalkTheme.cardInk
+        note.tintColor = WalkTheme.accent
+        note.layer.cornerRadius = 14
         note.textContainerInset = UIEdgeInsets(top: 10, left: 8, bottom: 10, right: 8)
         note.heightAnchor.constraint(greaterThanOrEqualToConstant: 88).isActive = true
         note.accessibilityLabel = "補充說明"
         note.accessibilityIdentifier = "walkReportNote"
         note.delegate = self
         let toolbar = UIToolbar()
-        let done = UIBarButtonItem(title: "完成", style: .done, target: self, action: #selector(finishEditing))
+        let done = UIBarButtonItem(title: "完成", style: .plain, target: self, action: #selector(finishEditing))
         done.accessibilityIdentifier = "walkReportEndEditing"
         toolbar.items = [UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil), done]
         toolbar.sizeToFit()
         note.inputAccessoryView = toolbar
         stack.addArrangedSubview(note)
-        let hint = label("選擇「其他」時請填寫原因。寄送前可以在郵件裡確認內容。", style: .footnote)
-        hint.textColor = .secondaryLabel
+        let hint = label("選擇「其他」時請填寫原因。寄送前可以在郵件裡確認內容。",
+                         font: WalkTheme.sans(13, weight: .regular, style: .footnote), color: WalkTheme.soft)
         stack.addArrangedSubview(hint)
+        stack.setCustomSpacing(18, after: hint)
 
-        configure(compose, title: "撰寫回報郵件", id: "walkReportPrepare", style: .filled(), action: #selector(prepareMail))
-        configure(copyReport, title: "複製完整回報", id: "walkReportCopy", style: .tinted(), action: #selector(copyContent))
+        configure(compose, title: "撰寫回報郵件", id: "walkReportPrepare", style: .main, action: #selector(prepareMail))
+        configure(copyReport, title: "複製完整回報", id: "walkReportCopy", style: .outline, action: #selector(copyContent))
         let copyAddress = UIButton(type: .system)
-        configure(copyAddress, title: "複製收件地址", id: "walkReportCopyAddress", style: .plain(), action: #selector(copyRecipient))
-        configure(discard, title: "清除這份草稿", id: "walkReportDiscard", style: .plain(), action: #selector(confirmDiscard))
-        discard.configuration?.baseForegroundColor = .systemRed
-        status.font = .preferredFont(forTextStyle: .body)
+        configure(copyAddress, title: "複製收件地址", id: "walkReportCopyAddress", style: .quiet, action: #selector(copyRecipient))
+        configure(discard, title: "清除這份草稿", id: "walkReportDiscard", style: .danger, action: #selector(confirmDiscard))
+        stack.setCustomSpacing(16, after: compose)
+        status.font = WalkTheme.kai(17, style: .body)
+        status.textColor = WalkTheme.ink
+        status.textAlignment = .center
         status.adjustsFontForContentSizeCategory = true
         status.numberOfLines = 0
         status.accessibilityIdentifier = "walkReportStatus"
@@ -119,21 +124,19 @@ final class WalkPlaceReportViewController: UIViewController, UITextViewDelegate,
         refresh()
     }
 
-    private func label(_ text: String, style: UIFont.TextStyle) -> UILabel {
+    private func label(_ text: String, font: UIFont, color: UIColor = WalkTheme.ink) -> UILabel {
         let label = UILabel()
         label.text = text
-        label.font = .preferredFont(forTextStyle: style)
+        label.font = font
+        label.textColor = color
         label.adjustsFontForContentSizeCategory = true
         label.numberOfLines = 0
         return label
     }
 
-    private func configure(_ button: UIButton, title: String, id: String, style: UIButton.Configuration, action: Selector) {
-        var configuration = style
-        configuration.title = title
-        configuration.buttonSize = .medium
-        button.configuration = configuration
-        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+    private func configure(_ button: UIButton, title: String, id: String, style: WalkTheme.ButtonKind, action: Selector) {
+        WalkTheme.dress(button, style, title: title)
+        button.heightAnchor.constraint(greaterThanOrEqualToConstant: style == .main ? 56 : 46).isActive = true
         button.accessibilityIdentifier = id
         button.addTarget(self, action: action, for: .touchUpInside)
     }
@@ -149,6 +152,9 @@ final class WalkPlaceReportViewController: UIViewController, UITextViewDelegate,
             let button = reasonButtons[index]
             let selected = reason == selectedReason
             button.configuration?.image = UIImage(systemName: selected ? "checkmark.circle.fill" : "circle")
+            // 選到的原因跟網頁的已選按鈕一樣：米白底、紅磚字。
+            button.configuration?.baseForegroundColor = selected ? WalkTheme.brickDeep : WalkTheme.ink
+            button.configuration?.background.backgroundColor = selected ? WalkTheme.ink : WalkTheme.shade
             if selected { button.accessibilityTraits.insert(.selected) }
             else { button.accessibilityTraits.remove(.selected) }
         }

@@ -28,6 +28,9 @@ def build():
         records = json.loads((ROOT / path).read_text(encoding="utf-8"))
         text += "".join(str(item.get(key) or "") for item in records
                         for key in ("name", "desc", "tag", "text"))
+    # iPhone 原生畫面也用文楷，把 Swift 裡的字串一併收進子集。
+    for source in sorted((ROOT / "ios/LukangWalk").glob("*.swift")):
+        text += source.read_text(encoding="utf-8")
     characters = set(range(32, 127)) | {ord(c) for c in text}
     with TemporaryDirectory() as tmp:
         for version, filename, output in FONTS:

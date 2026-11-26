@@ -167,7 +167,8 @@ private final class WalkPhotoList: UITableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         tableView.accessibilityIdentifier = "walkAlbumList"
-        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .done, target: self,
+        WalkTheme.paint(tableView)
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .plain, target: self,
                                                            action: #selector(close))
         navigationItem.rightBarButtonItem?.accessibilityIdentifier = "walkAlbumDone"
     }
@@ -185,15 +186,7 @@ private final class WalkPhotoList: UITableViewController {
         }
     }
 
-    private func message(_ text: String) -> UILabel {
-        let label = UILabel()
-        label.text = text
-        label.textAlignment = .center
-        label.numberOfLines = 0
-        label.font = .preferredFont(forTextStyle: .body)
-        label.adjustsFontForContentSizeCategory = true
-        return label
-    }
+    private func message(_ text: String) -> UILabel { WalkTheme.message(text) }
 
     @objc private func close() { dismiss(animated: true) }
 
@@ -210,6 +203,8 @@ private final class WalkPhotoList: UITableViewController {
         content.image = cached ?? UIImage(systemName: "photo")
         content.imageProperties.maximumSize = CGSize(width: 64, height: 48)
         content.imageProperties.reservedLayoutSize = CGSize(width: 64, height: 48)
+        content.imageProperties.cornerRadius = 8
+        WalkTheme.style(cell, &content)
         cell.contentConfiguration = content
         cell.accessoryType = .disclosureIndicator
         cell.accessibilityIdentifier = "walkAlbumVisit-" + record.visit.id
@@ -256,8 +251,8 @@ private final class WalkPhotoDetail: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
-        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .done, target: self,
+        WalkTheme.paint(view)
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .plain, target: self,
                                                            action: #selector(close))
         navigationItem.rightBarButtonItem?.accessibilityIdentifier = "walkAlbumDone"
         picker.accessibilityIdentifier = "walkAlbumImagePicker"
@@ -269,10 +264,11 @@ private final class WalkPhotoDetail: UIViewController {
         picture.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         caption.textAlignment = .center
         caption.numberOfLines = 0
-        caption.font = .preferredFont(forTextStyle: .subheadline)
+        caption.font = WalkTheme.sans(15, weight: .medium, style: .subheadline)
+        caption.textColor = WalkTheme.soft
         caption.adjustsFontForContentSizeCategory = true
-        shareButton.configuration = .filled()
-        shareButton.setTitle("分享透卡", for: .normal)
+        WalkTheme.dress(shareButton, .main, title: "分享透卡")
+        shareButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 56).isActive = true
         shareButton.accessibilityIdentifier = "walkAlbumShare"
         shareButton.addTarget(self, action: #selector(share), for: .touchUpInside)
         shareButton.isEnabled = false

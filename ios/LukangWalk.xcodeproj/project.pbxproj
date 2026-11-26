@@ -19,6 +19,7 @@
 		B10000000000000000000015 /* WalkNavigationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000015 /* WalkNavigationViewController.swift */; };
 		B10000000000000000000016 /* WalkPlaceReportViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000016 /* WalkPlaceReportViewController.swift */; };
 		B10000000000000000000017 /* WalkPlaceReportMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000017 /* WalkPlaceReportMessage.swift */; };
+		B10000000000000000000018 /* WalkTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000018 /* WalkTheme.swift */; };
 		B10000000000000000000005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000005 /* Assets.xcassets */; };
 		B10000000000000000000006 /* credits.html in Web */ = {isa = PBXBuildFile; fileRef = F10000000000000000000006 /* credits.html */; };
 		B10000000000000000000007 /* index.html in Web */ = {isa = PBXBuildFile; fileRef = F10000000000000000000007 /* index.html */; };
@@ -72,6 +73,7 @@
 		F10000000000000000000015 /* WalkNavigationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkNavigationViewController.swift; sourceTree = "<group>"; };
 		F10000000000000000000016 /* WalkPlaceReportViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkPlaceReportViewController.swift; sourceTree = "<group>"; };
 		F10000000000000000000017 /* WalkPlaceReportMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkPlaceReportMessage.swift; sourceTree = "<group>"; };
+		F10000000000000000000018 /* WalkTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkTheme.swift; sourceTree = "<group>"; };
 		F10000000000000000000005 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F10000000000000000000006 /* credits.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = credits.html; path = Credits/credits.html; sourceTree = "<group>"; };
 		F10000000000000000000007 /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
@@ -130,6 +132,7 @@
 				F10000000000000000000015 /* WalkNavigationViewController.swift */,
 				F10000000000000000000016 /* WalkPlaceReportViewController.swift */,
 				F10000000000000000000017 /* WalkPlaceReportMessage.swift */,
+				F10000000000000000000018 /* WalkTheme.swift */,
 				F10000000000000000000005 /* Assets.xcassets */,
 				F10000000000000000000006 /* credits.html */,
 				F1000000000000000000000C /* Info.plist */,
@@ -261,6 +264,7 @@
 				B10000000000000000000015 /* WalkNavigationViewController.swift in Sources */,
 				B10000000000000000000016 /* WalkPlaceReportViewController.swift in Sources */,
 				B10000000000000000000017 /* WalkPlaceReportMessage.swift in Sources */,
+				B10000000000000000000018 /* WalkTheme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

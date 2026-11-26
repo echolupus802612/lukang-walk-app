@@ -11,6 +11,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                options connectionOptions: UIScene.ConnectionOptions) {
         guard let scene = scene as? UIWindowScene else { return }
         let window = UIWindow(windowScene: scene)
+        WalkTheme.apply(to: window)
         window.rootViewController = WalkViewController()
         self.window = window
         window.makeKeyAndVisible()

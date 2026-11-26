@@ -719,7 +719,7 @@ private final class CreditsViewController: UIViewController, WKNavigationDelegat
     override func viewDidLoad() {
         super.viewDidLoad()
         navigationItem.title = "資料來源與授權"
-        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .done, target: self,
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .plain, target: self,
                                                            action: #selector(close))
         if let web = view as? WKWebView {
             loadCredits(in: web)

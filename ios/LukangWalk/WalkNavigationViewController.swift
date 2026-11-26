@@ -28,7 +28,8 @@ final class WalkNavigationSettingsViewController: UITableViewController, CLLocat
     override func viewDidLoad() {
         super.viewDidLoad()
         tableView.accessibilityIdentifier = "walkNavigationSettings"
-        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .done, target: self,
+        WalkTheme.paint(tableView)
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .plain, target: self,
                                                            action: #selector(close))
         NotificationCenter.default.addObserver(self, selector: #selector(enteredBackground),
                                                name: UIApplication.didEnterBackgroundNotification, object: nil)
@@ -77,6 +78,14 @@ final class WalkNavigationSettingsViewController: UITableViewController, CLLocat
         ["回程地點", "距離顯示", "到站範圍"][section]
     }
 
+    override func tableView(_ tableView: UITableView, willDisplayHeaderView view: UIView, forSection section: Int) {
+        WalkTheme.style(header: view)
+    }
+
+    override func tableView(_ tableView: UITableView, willDisplayFooterView view: UIView, forSection section: Int) {
+        WalkTheme.style(header: view, footer: true)
+    }
+
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
         switch section {
         case 0: return pointMessage ?? "點選後才會取得目前位置。回程地點只儲存在這支 iPhone。"
@@ -123,6 +132,7 @@ final class WalkNavigationSettingsViewController: UITableViewController, CLLocat
                 cell.accessibilityTraits.insert(.selected)
             }
         }
+        WalkTheme.style(cell, &content)
         cell.contentConfiguration = content
         return cell
     }
@@ -313,7 +323,7 @@ final class WalkNavigationViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemGroupedBackground
+        WalkTheme.paint(view)
         navigationController?.isModalInPresentation = true
 
         let scroll = UIScrollView()
@@ -339,9 +349,16 @@ final class WalkNavigationViewController: UIViewController {
             stack.widthAnchor.constraint(equalTo: frame.widthAnchor, constant: -48)
         ])
 
-        for (label, style) in [(status, UIFont.TextStyle.title1), (guidance, .body),
-                               (distance, .title3), (notificationHint, .footnote)] {
-            label.font = .preferredFont(forTextStyle: style)
+        // 跟主畫面一樣：文楷寫提示、黑體寫距離，米白字在紅磚底上。
+        let looks: [(UILabel, UIFont, UIColor)] = [
+            (status, WalkTheme.kai(30, bold: true, style: .title1), WalkTheme.ink),
+            (guidance, WalkTheme.kai(18, style: .body), WalkTheme.soft),
+            (distance, WalkTheme.sans(30, weight: .bold, style: .title2), WalkTheme.ink),
+            (notificationHint, WalkTheme.sans(13, weight: .regular, style: .footnote), WalkTheme.soft)
+        ]
+        for (label, font, color) in looks {
+            label.font = font
+            label.textColor = color
             label.adjustsFontForContentSizeCategory = true
             label.numberOfLines = 0
             label.textAlignment = .center
@@ -353,29 +370,33 @@ final class WalkNavigationViewController: UIViewController {
         distance.addGestureRecognizer(UILongPressGestureRecognizer(target: self, action: #selector(heldDistance(_:))))
         distance.accessibilityHint = "長按可切換距離顯示。"
         notificationHint.text = "目前無法傳送通知。回到 App 即可查看回程狀態。"
-        notificationHint.textColor = .secondaryLabel
         arrow.contentMode = .scaleAspectFit
-        arrow.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 68, weight: .semibold)
-        arrow.tintColor = .systemTeal
+        arrow.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 84, weight: .bold)
+        arrow.tintColor = WalkTheme.gold
+        arrow.layer.shadowColor = UIColor(red: 42 / 255, green: 13 / 255, blue: 7 / 255, alpha: 1).cgColor
+        arrow.layer.shadowOpacity = 0.45
+        arrow.layer.shadowRadius = 0
+        arrow.layer.shadowOffset = CGSize(width: 0, height: 4)
         arrow.isAccessibilityElement = false
 
-        retry.configuration = .tinted()
-        retry.setTitle("重新定位", for: .normal)
+        WalkTheme.dress(retry, .outline, title: "重新定位", image: "location")
         retry.accessibilityIdentifier = "walkRetryReturn"
         retry.addTarget(self, action: #selector(retryLocation), for: .touchUpInside)
-        action.configuration = .filled()
+        WalkTheme.dress(action, .outline)
         action.accessibilityIdentifier = "walkFinishReturn"
         action.addTarget(self, action: #selector(finish), for: .touchUpInside)
         for item in [status, arrow, guidance, distance, notificationHint, retry, action] {
             stack.addArrangedSubview(item)
         }
         NSLayoutConstraint.activate([
-            arrow.widthAnchor.constraint(equalToConstant: 100),
-            arrow.heightAnchor.constraint(equalToConstant: 100),
+            arrow.widthAnchor.constraint(equalToConstant: 120),
+            arrow.heightAnchor.constraint(equalToConstant: 120),
             distance.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
             distance.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            action.heightAnchor.constraint(greaterThanOrEqualToConstant: 46),
-            action.widthAnchor.constraint(equalTo: stack.widthAnchor)
+            action.heightAnchor.constraint(greaterThanOrEqualToConstant: 56),
+            action.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            retry.heightAnchor.constraint(greaterThanOrEqualToConstant: 46),
+            retry.widthAnchor.constraint(equalTo: stack.widthAnchor)
         ])
         refresh()
     }
@@ -467,6 +488,11 @@ final class WalkNavigationViewController: UIViewController {
         guard isViewLoaded else { return }
         retry.isHidden = ended || !(locationFailed || fixExpired)
         notificationHint.isHidden = !notifyUnavailable || ended
+        if ended != (action.tag == 1) {
+            // 回到原地後，「完成」換成主畫面那顆金色主按鈕。
+            WalkTheme.dress(action, ended ? .main : .outline)
+            action.tag = ended ? 1 : 0
+        }
         action.setTitle(ended ? "完成" : "停止回程", for: .normal)
         distance.isHidden = ended
         arrow.transform = .identity

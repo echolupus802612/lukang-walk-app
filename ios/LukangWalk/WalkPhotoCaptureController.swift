@@ -58,11 +58,13 @@ final class WalkPhotoCaptureController: UIViewController, PHPickerViewController
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
+        WalkTheme.paint(view)
         title = place
         navigationItem.leftBarButtonItem = UIBarButtonItem(title: "取消", style: .plain, target: self, action: #selector(close))
         message.text = "選一張照片，製作這一站的小嚮導透卡。"
-        message.font = .preferredFont(forTextStyle: .body)
+        message.font = WalkTheme.kai(19, style: .body)
+        message.textColor = WalkTheme.soft
+        spinner.color = WalkTheme.ink
         message.adjustsFontForContentSizeCategory = true
         message.textAlignment = .center
         message.numberOfLines = 0
@@ -83,12 +85,10 @@ final class WalkPhotoCaptureController: UIViewController, PHPickerViewController
     }
 
     private func configure(_ button: UIButton, title: String, icon: String, action: Selector) {
-        var config = UIButton.Configuration.tinted()
-        config.title = title
-        config.image = UIImage(systemName: icon)
-        config.imagePadding = 10
-        config.buttonSize = .large
-        button.configuration = config
+        // 拍照是這一頁的主要動作，用金色主按鈕；其他是米白框線。
+        let leads = button === camera || (button === library && !UIImagePickerController.isSourceTypeAvailable(.camera))
+        WalkTheme.dress(button, leads ? .main : .outline, title: title, image: icon)
+        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 56).isActive = true
         button.addTarget(self, action: action, for: .touchUpInside)
     }
 

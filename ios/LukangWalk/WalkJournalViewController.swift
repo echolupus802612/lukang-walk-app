@@ -71,6 +71,7 @@ final class WalkJournalViewController: UITableViewController, UISearchResultsUpd
     override func viewDidLoad() {
         super.viewDidLoad()
         tableView.accessibilityIdentifier = "walkJournalList"
+        WalkTheme.paint(tableView)
         tableView.keyboardDismissMode = .onDrag
         search.obscuresBackgroundDuringPresentation = false
         search.searchBar.placeholder = "搜尋地點或筆記"
@@ -79,7 +80,7 @@ final class WalkJournalViewController: UITableViewController, UISearchResultsUpd
         navigationItem.searchController = search
         navigationItem.hidesSearchBarWhenScrolling = false
         definesPresentationContext = true
-        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .done, target: self,
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .plain, target: self,
                                                             action: #selector(close))
         navigationItem.rightBarButtonItem?.accessibilityIdentifier = "walkJournalDone"
         NotificationCenter.default.addObserver(self, selector: #selector(reloadJournal),
@@ -123,13 +124,11 @@ final class WalkJournalViewController: UITableViewController, UISearchResultsUpd
         bookmark.accessibilityLabel = favoritesOnly ? "顯示全部" : "只看收藏"
         bookmark.accessibilityIdentifier = "walkJournalFavoritesFilter"
         navigationItem.leftBarButtonItem = bookmark
-        let empty = UILabel()
-        empty.textAlignment = .center
-        empty.textColor = .secondaryLabel
-        if readFailed { empty.text = "暫時無法讀取散步日誌。" }
-        else if !query.isEmpty { empty.text = "找不到符合的地點或筆記。" }
-        else if favoritesOnly { empty.text = "還沒有收藏。" }
-        else { empty.text = "還沒有散步紀錄。" }
+        let empty: UILabel
+        if readFailed { empty = WalkTheme.message("暫時無法讀取散步日誌。") }
+        else if !query.isEmpty { empty = WalkTheme.message("找不到符合的地點或筆記。") }
+        else if favoritesOnly { empty = WalkTheme.message("還沒有收藏。") }
+        else { empty = WalkTheme.message("還沒有散步紀錄。") }
         tableView.backgroundView = sections.isEmpty ? empty : nil
         tableView.reloadData()
     }
@@ -144,6 +143,10 @@ final class WalkJournalViewController: UITableViewController, UISearchResultsUpd
         sections[section].first?.status == .legacy ? "以往到過的地點" : nil
     }
 
+    override func tableView(_ tableView: UITableView, willDisplayHeaderView view: UIView, forSection section: Int) {
+        WalkTheme.style(header: view)
+    }
+
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let entry = sections[indexPath.section][indexPath.row]
         let cell = tableView.dequeueReusableCell(withIdentifier: "entry") ?? UITableViewCell(style: .subtitle, reuseIdentifier: "entry")
@@ -155,6 +158,7 @@ final class WalkJournalViewController: UITableViewController, UISearchResultsUpd
         if !entry.note.isEmpty { content.secondaryText? += "\n" + entry.note }
         content.secondaryTextProperties.numberOfLines = 2
         content.image = UIImage(systemName: entry.favorite ? "heart.fill" : "book.closed")
+        WalkTheme.style(cell, &content)
         cell.contentConfiguration = content
         cell.accessoryType = .disclosureIndicator
         cell.accessibilityIdentifier = "walkJournalEntry-" + entry.id
@@ -203,7 +207,8 @@ private final class WalkJournalDetail: UITableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         tableView.accessibilityIdentifier = "walkJournalDetail"
-        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .done, target: self,
+        WalkTheme.paint(tableView)
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .plain, target: self,
                                                             action: #selector(close))
         navigationItem.rightBarButtonItem?.accessibilityIdentifier = "walkJournalDone"
         NotificationCenter.default.addObserver(self, selector: #selector(reloadJournal),
@@ -225,10 +230,7 @@ private final class WalkJournalDetail: UITableViewController {
             tableView.backgroundView = nil
         } catch {
             entry = nil
-            let label = UILabel()
-            label.textAlignment = .center
-            label.text = "暫時無法讀取這筆紀錄。"
-            tableView.backgroundView = label
+            tableView.backgroundView = WalkTheme.message("暫時無法讀取這筆紀錄。")
         }
         render()
         guard let entry, entry.status != .legacy else { return }
@@ -317,6 +319,7 @@ private final class WalkJournalDetail: UITableViewController {
         case .favorite: cell.selectionStyle = .default
         default: break
         }
+        WalkTheme.style(cell, &content)
         cell.contentConfiguration = content
         return cell
     }
@@ -338,6 +341,7 @@ private final class WalkJournalDetail: UITableViewController {
             let controller = UIViewController()
             controller.title = "地點地圖"
             let map = MKMapView()
+            map.tintColor = WalkTheme.brick
             map.accessibilityIdentifier = "walkJournalPlaceMap"
             let pin = MKPointAnnotation()
             pin.coordinate = coordinate
@@ -379,9 +383,13 @@ private final class WalkJournalNote: UIViewController, UITextViewDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = WalkTheme.card
+        editor.backgroundColor = WalkTheme.card
+        editor.textColor = WalkTheme.cardInk
+        editor.tintColor = WalkTheme.accent
+        editor.textContainerInset = UIEdgeInsets(top: 16, left: 4, bottom: 16, right: 4)
         editor.text = original
-        editor.font = .preferredFont(forTextStyle: .body)
+        editor.font = WalkTheme.kai(18, style: .body)
         editor.adjustsFontForContentSizeCategory = true
         editor.delegate = self
         editor.accessibilityLabel = "筆記內容"
@@ -395,7 +403,7 @@ private final class WalkJournalNote: UIViewController, UITextViewDelegate {
             editor.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
         ])
         navigationItem.leftBarButtonItem = UIBarButtonItem(title: "取消", style: .plain, target: self, action: #selector(close))
-        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "儲存", style: .done, target: self, action: #selector(save))
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "儲存", style: .plain, target: self, action: #selector(save))
         navigationItem.rightBarButtonItem?.accessibilityIdentifier = "walkJournalSaveNote"
     }
 
