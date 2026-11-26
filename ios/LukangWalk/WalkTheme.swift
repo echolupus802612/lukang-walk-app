@@ -65,11 +65,14 @@ enum WalkTheme {
         bar.shadowColor = .clear
         bar.titleTextAttributes = [.foregroundColor: ink, .font: kai(19, bold: true, style: .headline)]
         bar.largeTitleTextAttributes = [.foregroundColor: ink, .font: kai(32, bold: true, style: .largeTitle)]
+        // iOS 26 的列按鈕是淺色玻璃，米白字會看不見，改用深棕字；舊版仍是紅磚底上的米白字。
+        let barText: UIColor
+        if #available(iOS 26, *) { barText = cardInk } else { barText = ink }
         let plain = UIBarButtonItemAppearance()
-        plain.normal.titleTextAttributes = [.foregroundColor: ink, .font: kai(17, style: .body)]
+        plain.normal.titleTextAttributes = [.foregroundColor: barText, .font: kai(17, style: .body)]
         bar.buttonAppearance = plain
         let done = UIBarButtonItemAppearance()
-        done.normal.titleTextAttributes = [.foregroundColor: gold, .font: kai(17, bold: true, style: .body)]
+        done.normal.titleTextAttributes = [.foregroundColor: barText, .font: kai(17, bold: true, style: .body)]
         bar.doneButtonAppearance = done
         bar.backButtonAppearance = plain
         let navigation = UINavigationBar.appearance()
@@ -77,7 +80,7 @@ enum WalkTheme {
         navigation.scrollEdgeAppearance = bar
         navigation.compactAppearance = bar
         navigation.compactScrollEdgeAppearance = bar
-        navigation.tintColor = ink
+        navigation.tintColor = barText
 
         let toolbar = UIToolbarAppearance()
         toolbar.configureWithOpaqueBackground()
@@ -87,7 +90,7 @@ enum WalkTheme {
         UIToolbar.appearance().standardAppearance = toolbar
         UIToolbar.appearance().compactAppearance = toolbar
         UIToolbar.appearance().scrollEdgeAppearance = toolbar
-        UIToolbar.appearance().tintColor = ink
+        UIToolbar.appearance().tintColor = barText
 
         UISwitch.appearance().onTintColor = gold2
 
