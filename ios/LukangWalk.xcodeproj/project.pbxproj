@@ -15,6 +15,8 @@
 		B10000000000000000000011 /* WalkPhotoAlbum.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000011 /* WalkPhotoAlbum.swift */; };
 		B10000000000000000000012 /* WalkJournalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000012 /* WalkJournalStore.swift */; };
 		B10000000000000000000013 /* WalkJournalViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000013 /* WalkJournalViewController.swift */; };
+		B10000000000000000000014 /* WalkNavigationPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000014 /* WalkNavigationPreferences.swift */; };
+		B10000000000000000000015 /* WalkNavigationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000015 /* WalkNavigationViewController.swift */; };
 		B10000000000000000000005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000005 /* Assets.xcassets */; };
 		B10000000000000000000006 /* credits.html in Web */ = {isa = PBXBuildFile; fileRef = F10000000000000000000006 /* credits.html */; };
 		B10000000000000000000007 /* index.html in Web */ = {isa = PBXBuildFile; fileRef = F10000000000000000000007 /* index.html */; };
@@ -64,6 +66,8 @@
 		F10000000000000000000011 /* WalkPhotoAlbum.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkPhotoAlbum.swift; sourceTree = "<group>"; };
 		F10000000000000000000012 /* WalkJournalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkJournalStore.swift; sourceTree = "<group>"; };
 		F10000000000000000000013 /* WalkJournalViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkJournalViewController.swift; sourceTree = "<group>"; };
+		F10000000000000000000014 /* WalkNavigationPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkNavigationPreferences.swift; sourceTree = "<group>"; };
+		F10000000000000000000015 /* WalkNavigationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkNavigationViewController.swift; sourceTree = "<group>"; };
 		F10000000000000000000005 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F10000000000000000000006 /* credits.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = credits.html; path = Credits/credits.html; sourceTree = "<group>"; };
 		F10000000000000000000007 /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
@@ -118,6 +122,8 @@
 				F10000000000000000000011 /* WalkPhotoAlbum.swift */,
 				F10000000000000000000012 /* WalkJournalStore.swift */,
 				F10000000000000000000013 /* WalkJournalViewController.swift */,
+				F10000000000000000000014 /* WalkNavigationPreferences.swift */,
+				F10000000000000000000015 /* WalkNavigationViewController.swift */,
 				F10000000000000000000005 /* Assets.xcassets */,
 				F10000000000000000000006 /* credits.html */,
 				F1000000000000000000000C /* Info.plist */,
@@ -245,6 +251,8 @@
 				B10000000000000000000011 /* WalkPhotoAlbum.swift in Sources */,
 				B10000000000000000000012 /* WalkJournalStore.swift in Sources */,
 				B10000000000000000000013 /* WalkJournalViewController.swift in Sources */,
+				B10000000000000000000014 /* WalkNavigationPreferences.swift in Sources */,
+				B10000000000000000000015 /* WalkNavigationViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -263,9 +271,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.echolupus802612.lukangwalk.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -279,9 +287,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.echolupus802612.lukangwalk.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -325,11 +333,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LukangWalk/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.echolupus802612.lukangwalk;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -344,11 +352,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LukangWalk/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.echolupus802612.lukangwalk;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

@@ -379,6 +379,131 @@ final class WalkUITests: XCTestCase {
     }
 
     @MainActor
+    func testReturnUsesSavedPointAndNotifiesWithoutAddingFootprints() throws {
+        let device = XCUIDevice.shared
+        let previousLocation = device.location
+        defer { device.location = previousLocation }
+        let point = CLLocationCoordinate2D(latitude: 24.12567, longitude: 121.23742)
+        let start = CLLocationCoordinate2D(latitude: 24.11967, longitude: 121.23742)
+        setLocation(point)
+        let app = XCUIApplication()
+        app.launch()
+        let game = app.webViews.firstMatch
+        let settingsButton = game.buttons["導航設定"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 15))
+        settingsButton.tap()
+        let settings = app.tables["walkNavigationSettings"]
+        let save = settings.cells["walkSaveReturnPoint"]
+        XCTAssertTrue(save.waitForExistence(timeout: 8))
+        setLocation(point)
+        save.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let locationPermission = springboard.alerts.buttons.matching(NSPredicate(
+            format: "label IN %@", ["Allow While Using App", "Allow While Using the App", "使用 App 期間允許", "使用 App 時允許"]
+        )).firstMatch
+        if locationPermission.waitForExistence(timeout: 2) { locationPermission.tap() }
+        setLocation(point)
+        XCTAssertTrue(settings.staticTexts["已儲存回程地點"].waitForExistence(timeout: 18))
+        let toggle = app.switches["walkHideDistance"]
+        XCTAssertTrue(toggle.exists)
+        if toggle.value as? String != "1" { toggle.tap() }
+        settings.cells["walkArrivalRadius100"].tap()
+        app.navigationBars["導航設定"].buttons["完成"].tap()
+
+        app.terminate()
+        setLocation(start)
+        app.launch()
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 15))
+        settingsButton.tap()
+        XCTAssertTrue(settings.staticTexts["已儲存回程地點"].waitForExistence(timeout: 6))
+        XCTAssertEqual(toggle.value as? String, "1")
+        XCTAssertTrue(settings.cells["walkArrivalRadius100"].isSelected)
+        app.navigationBars["導航設定"].buttons["完成"].tap()
+        let stats = game.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "出發過 ")).firstMatch
+        XCTAssertTrue(stats.waitForExistence(timeout: 10))
+        let before = stats.label.split(separator: " ").compactMap { Int($0) }
+        XCTAssertEqual(before.count, 2)
+        openJournal(app)
+        let journal = app.tables["walkJournalList"]
+        let previousRows = journal.cells.count
+        app.buttons["walkJournalDone"].tap()
+
+        startGPSWalk(app, at: start)
+        game.buttons["帶我回去"].tap()
+        let confirm = app.alerts.buttons["結束散步並回程"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        let status = app.staticTexts["walkReturnStatus"]
+        let distance = app.staticTexts["walkReturnDistance"]
+        XCTAssertTrue(distance.waitForExistence(timeout: 10))
+        XCTAssertEqual(distance.label, "距離已隱藏")
+        setLocation(start)
+        let north = NSPredicate(format: "label == %@", "朝北方回程")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: north, object: status)], timeout: 12),
+                       .completed)
+        distance.press(forDuration: 0.8)
+        XCTAssertTrue(distance.label.contains("公尺"))
+        let guide = XCTAttachment(screenshot: app.screenshot())
+        guide.name = "回程方位與距離"
+        guide.lifetime = .keepAlways
+        add(guide)
+
+        device.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 8))
+        // 兩筆都距離保存點約 65 公尺，只在設定的 100 公尺範圍內。
+        setLocation(.init(latitude: point.latitude - 0.00061, longitude: point.longitude))
+        Thread.sleep(forTimeInterval: 1.2)
+        setLocation(.init(latitude: point.latitude - 0.00057, longitude: point.longitude))
+        Thread.sleep(forTimeInterval: 2)
+        setLocation(start)
+        XCTAssertNotEqual(app.state, .runningForeground)
+        let notification = springboard.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "已抵達回程地點")
+        ).firstMatch
+        if !notification.waitForExistence(timeout: 2) || !notification.isHittable {
+            let top = springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.24, dy: 0.005))
+            let bottom = springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.24, dy: 0.85))
+            top.press(forDuration: 0.15, thenDragTo: bottom)
+        }
+        XCTAssertTrue(notification.waitForExistence(timeout: 10), "系統通知應證明已在背景抵達回程地點")
+        XCTAssertNotEqual(app.state, .runningForeground)
+        notification.tap()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+        XCTAssertTrue(status.waitForExistence(timeout: 8))
+        XCTAssertEqual(status.label, "已抵達回程地點")
+        app.buttons["walkFinishReturn"].tap()
+        XCTAssertTrue(stats.waitForExistence(timeout: 8))
+        XCTAssertEqual(stats.label.split(separator: " ").compactMap { Int($0) }, [before[0] + 1, before[1]])
+        openJournal(app)
+        XCTAssertEqual(journal.cells.count, previousRows + 1, "原本的散步收工後，回程不增加日誌趟次")
+        app.buttons["walkJournalDone"].tap()
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 15))
+        let homeReturn = game.buttons["帶我回去"]
+        homeReturn.tap()
+        let stopReturn = app.buttons["walkFinishReturn"]
+        XCTAssertTrue(stopReturn.waitForExistence(timeout: 8))
+        XCTAssertEqual(stopReturn.label, "停止回程")
+        stopReturn.tap()
+        XCTAssertTrue(stats.waitForExistence(timeout: 8))
+        XCTAssertEqual(stats.label.split(separator: " ").compactMap { Int($0) }, [before[0] + 1, before[1]])
+        settingsButton.tap()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 6))
+        XCTAssertEqual(toggle.value as? String, "0", "回程長按顯示距離的選擇應保存")
+        settings.cells["walkClearReturnPoint"].tap()
+        app.alerts.buttons["清除"].tap()
+        XCTAssertTrue(settings.staticTexts["尚未設定回程地點"].waitForExistence(timeout: 5))
+        settings.cells["walkArrivalRadius0"].tap()
+        app.navigationBars["導航設定"].buttons["完成"].tap()
+        homeReturn.tap()
+        XCTAssertTrue(settings.staticTexts["尚未設定回程地點"].waitForExistence(timeout: 8))
+        XCTAssertFalse(settings.cells["walkStartReturn"].exists)
+        app.navigationBars["導航設定"].buttons["完成"].tap()
+    }
+
+    @MainActor
     func testSimulatedWalkPersistsDrawAfterRelaunch() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-simulate-walk"]

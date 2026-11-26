@@ -39,6 +39,11 @@ jobs:
           xcrun swiftc -parse-as-library ios/LukangWalk/WalkJournalStore.swift tools/test_walk_journal.swift -o "$RUNNER_TEMP/test-walk-journal"
           "$RUNNER_TEMP/test-walk-journal"
 
+      - name: 驗證回程地點及到站設定
+        run: |
+          xcrun swiftc -parse-as-library ios/LukangWalk/WalkNavigationPreferences.swift tools/test_walk_navigation.swift -o "$RUNNER_TEMP/test-walk-navigation"
+          "$RUNNER_TEMP/test-walk-navigation"
+
       - name: Select an available iPhone
         run: |
           xcodebuild -version

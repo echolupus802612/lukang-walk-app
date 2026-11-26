@@ -7,7 +7,7 @@ import base64
 import json
 import unittest
 from datetime import datetime, timezone
-from math import degrees
+from math import asin, cos, degrees, radians, sin, sqrt
 from pathlib import Path
 from uuid import UUID
 
@@ -117,6 +117,152 @@ class WalkBridgeTests(unittest.TestCase):
     def enable_journal(self):
         self.page.add_init_script("window.lukangWalkJournal=true;")
         self.enable_walk_photos()
+
+    def enable_navigation(self):
+        self.page.add_init_script("window.lukangNavigation={hideDistance:false,arrivalRadius:0,hasReturnPoint:false};")
+        self.enable_journal()
+
+    def test_return_navigation_discards_old_callbacks_and_keeps_new_sensor_owner(self):
+        self.assertFalse(self.page.locator("#returnNavigation").is_visible())
+        self.assertFalse(self.page.locator('#bands [data-b="3"]').is_visible())
+        self.enable_navigation()
+        self.click("#navigationSettings")
+        self.click("#returnNavigation")
+        self.assertEqual(self.messages("returnNavigation"), [{"action":"returnNavigation"}])
+        self.assertEqual(self.messages("navigationSettings"), [{"action":"navigationSettings"}])
+        self.assertEqual(self.messages("start"), [])
+        pending = self.start()
+        self.click("#returnNavigation")
+        self.assertEqual(self.messages("returnNavigation")[-1], {"action":"returnNavigation","session":pending})
+        self.send("leaveForReturn", pending)
+        self.fix(pending, ORIGIN)
+        self.page.clock.fast_forward(12500)
+        self.assertEqual(self.writes(), [])
+        self.assertEqual(self.messages("stop"), [])
+        self.assertEqual(self.messages("awake"), [])
+        session = self.start()
+        self.fix(session, ORIGIN)
+        target = self.messages("target")[-1]
+        self.click("#returnNavigation")
+        self.assertEqual(self.messages("returnNavigation")[-1], {"action":"returnNavigation","session":session,"id":target["id"]})
+        self.assertTrue(self.page.locator("#stop").is_visible())
+        self.send("leaveForReturn",session)
+        self.send("resumeWalk",session,id=target["id"],placeID=target["placeID"])
+        self.send("arrival",session,token=target["id"],placeID=target["placeID"],seen=[target["placeID"]],recent=[target["placeID"]])
+        self.page.clock.fast_forward(2000)
+        self.assertTrue(self.page.locator("#go").is_visible())
+        self.assertFalse(self.page.locator("#veil").is_visible())
+        self.assertEqual(self.messages("journalFinish"), [])
+        self.assertEqual(self.messages("stop"), [])
+        self.assertEqual(self.writes(), [{"drawn":5}])
+        session=self.start()
+        self.send("error",session,reason="denied")
+        simulation=self.messages("journalBegin")[-1]["id"]
+        self.click("#returnNavigation")
+        self.assertEqual(self.messages("returnNavigation")[-1], {"action":"returnNavigation","id":simulation})
+        self.send("leaveForReturn",session)
+        self.assertFalse(self.page.locator("#stepTo").is_visible())
+        self.assertEqual(self.messages("journalFinish"), [])
+        self.send("arrival",target["session"],token=target["id"],placeID=target["placeID"],seen=[target["placeID"]],
+                  recent=[target["placeID"]],replayAfterReturn=True)
+        self.page.clock.fast_forward(1800)
+        self.assertEqual(self.label("#cname"),target["name"])
+        self.assertEqual(self.messages("arrivalShown"), [{"action":"arrivalShown","token":target["id"]}])
+        self.click("#again")
+        self.send("arrival",target["session"],token=target["id"],placeID=target["placeID"],seen=[target["placeID"]],
+                  recent=[target["placeID"]],replayAfterReturn=True)
+        self.assertFalse(self.page.locator("#veil").is_visible())
+
+    def test_distance_hold_preferences_and_arrival_controls(self):
+        self.enable_navigation()
+        session=self.start()
+        self.fix(session,ORIGIN,age=1300)
+        target=self.messages("target")[-1]
+        distance=self.page.locator("#dist")
+        pointer={"button":0,"isPrimary":True,"pointerType":"touch"}
+        distance.dispatch_event("pointerdown",pointer)
+        self.page.clock.fast_forward(400)
+        distance.dispatch_event("pointercancel",pointer)
+        self.page.clock.fast_forward(600)
+        self.assertEqual(self.messages("setHideDistance"), [])
+        distance.dispatch_event("pointerdown",pointer)
+        self.page.clock.fast_forward(600)
+        distance.dispatch_event("pointerup",pointer)
+        self.assertEqual(self.messages("setHideDistance"), [{"action":"setHideDistance","hidden":True}])
+        self.assertEqual(distance.inner_text(),"剩餘距離已隱藏")
+        self.fix(session,(PLACE["lat"]+0.0005,PLACE["lng"]),age=450)
+        self.assertNotIn("附近",self.label("#say"))
+        self.send("navigationPreferences",session,hideDistance=True,arrivalRadius=100,hasReturnPoint=True)
+        self.assertEqual(self.page.locator("#returnNavigation").get_attribute("title"),"開始回程")
+        self.fix(session,(PLACE["lat"]+0.0004,PLACE["lng"]),age=300)
+        self.assertNotIn("近",self.label("#sub"))
+        self.send("navigationPreferences",session,hideDistance=False,arrivalRadius=25,hasReturnPoint=True)
+        self.assertIn("公尺",distance.inner_text())
+        self.fix(session,(PLACE["lat"]+0.0004,PLACE["lng"]),age=200)
+        self.assertNotIn("很近",self.label("#sub"))
+        self.send("navigationPreferences",session,hideDistance=False,arrivalRadius=50,hasReturnPoint=True)
+        self.fix(session,(PLACE["lat"]+0.0004,PLACE["lng"]),age=100)
+        self.assertIn("很近", self.label("#sub"))
+        self.assertEqual(self.messages("arrived"), [])
+        self.send("arrival",session,token=target["id"],placeID=target["placeID"],seen=[target["placeID"]],recent=[target["placeID"]])
+        self.page.clock.fast_forward(1800)
+        self.click("#cardNavigationSettings")
+        self.click("#cardReturnNavigation")
+        self.assertEqual(self.messages("returnNavigation")[-1], {"action":"returnNavigation","id":target["id"]})
+
+    def test_fixed_simulation_radius_waits_for_actual_motion(self):
+        self.enable_navigation()
+        session=self.start()
+        self.send("error",session,reason="denied")
+        step=self.page.locator("#stepTo")
+        step.dispatch_event("pointerdown")
+        for _ in range(490):
+            if int(self.label("#dist").split("公尺")[0].strip()) < 90:
+                break
+            self.page.clock.fast_forward(100)
+        step.dispatch_event("pointerup")
+        self.assertTrue(self.page.locator("#stop").is_visible())
+        self.send("navigationPreferences",session,arrivalRadius=100,hideDistance=True,hasReturnPoint=False)
+        self.send("heading",session,degrees=30)
+        self.page.clock.fast_forward(800)
+        self.assertEqual(self.messages("arrived"), [])
+        step.dispatch_event("pointerdown")
+        self.page.clock.fast_forward(100)
+        step.dispatch_event("pointerup")
+        self.assertEqual(len(self.messages("arrived")),1)
+        self.assertEqual(self.messages("journalFinish")[-1]["status"],"arrived")
+
+    def test_strict_long_distance_bands_with_remote_origin_and_reload(self):
+        self.enable_navigation()
+        def choose(band,point):
+            self.click(f'#bands [data-b="{band}"]')
+            self.click("#go")
+            session=self.messages("start")[-1]["session"]
+            self.fix(session,point)
+            return session
+        def meters(origin,target):
+            a,b=map(radians,origin)
+            c,d=map(radians,(target["latitude"],target["longitude"]))
+            return 2*6371000*asin(sqrt(sin((c-a)/2)**2+cos(a)*cos(c)*sin((d-b)/2)**2))
+        point=north_of_edge(10001)
+        choose(3,point)
+        self.assertIn("換個距離",self.label("#hint"))
+        self.assertNotIn("那就走遠一點",self.label("#go"))
+        self.assertEqual(self.messages("journalBegin"), [])
+        self.assertEqual(self.messages("target"), [])
+        for band,point,lower,upper in ((3,north_of_edge(6000),2000,10000),(4,point,10000,100000),(5,ORIGIN,100000,float("inf"))):
+            session=choose(band,point)
+            target=self.messages("target")[-1]
+            self.assertFalse(target["isSimulated"])
+            self.assertLess(meters(point,target),upper)
+            self.assertGreaterEqual(meters(point,target),lower)
+            if band==5:
+                self.page.reload(wait_until="domcontentloaded")
+                self.send("resumeWalk",session,id=target["id"],placeID=target["placeID"])
+                self.fix(session,point)
+                self.click("#redraw")
+                self.assertGreaterEqual(meters(point,self.messages("target")[-1]),lower)
+            self.click("#stop")
 
     def test_real_journal_reuses_trip_on_redraw_and_finishes_on_stop(self):
         self.enable_journal()

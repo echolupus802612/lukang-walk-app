@@ -17,7 +17,7 @@
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>當你選擇儲存影像時，將這一站的小嚮導透卡加入你的相簿。</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>散步時，小嚮導會用你的位置指路。鎖定螢幕或切換 App 後，仍會確認是否抵達。位置只在這支手機上使用。</string>
+    <string>散步或回程時，小嚮導會用你的位置指路，鎖定螢幕後仍會確認是否抵達。你也可以將目前位置存為回程地點。位置只在這支手機上使用。</string>
     <key>UIBackgroundModes</key>
     <array><string>location</string></array>
     <key>UILaunchScreen</key>

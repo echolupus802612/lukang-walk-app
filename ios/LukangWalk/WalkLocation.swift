@@ -3,20 +3,24 @@ import Foundation
 
 // Core Location delivers delegate calls on the run loop where the manager was created (here, main).
 final class WalkLocation: NSObject, CLLocationManagerDelegate {
-    // 系統偶爾會一次送來多筆背景定位；確認抵達的兩筆讀值都須在最近半分鐘內。
-    private static let arrivalWindow: TimeInterval = 30
+    private enum Destination: Equatable {
+        case place(Int)
+        case returnPoint
+    }
 
     private struct Target {
-        let placeID: Int
+        let destination: Destination
         let location: CLLocation
         let selectedAt: Date
     }
 
     var onEvent: (([String: Any]) -> Void)?
     var onArrival: ((Int, Int, Bool) -> Void)?
+    var onReturnArrival: ((Int, Bool) -> Void)?
+    private let preferences: WalkNavigationPreferences
     private var session: Int?
     private var target: Target?
-    private var previousInsideFix: Date?
+    private var arrivalCheck = WalkArrivalCheck()
     private var manager: CLLocationManager?
     private var foreground = false
     private var lastFix = Date.distantPast
@@ -26,10 +30,17 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
     private var requestedPermission = false
     private var updating = false
 
-    var activeTarget: (session: Int, placeID: Int)? {
-        guard let session, let target else { return nil }
-        return (session, target.placeID)
+    init(preferences: WalkNavigationPreferences = WalkNavigationPreferences()) {
+        self.preferences = preferences
+        super.init()
     }
+
+    var activeTarget: (session: Int, placeID: Int)? {
+        guard let session, let target, case .place(let id) = target.destination else { return nil }
+        return (session, id)
+    }
+
+    var activeReturn: Int? { target?.destination == .returnPoint ? session : nil }
 
     func start(_ session: Int) {
         guard self.session != session else { return }
@@ -40,14 +51,33 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
     }
 
     func setTarget(session: Int, placeID: Int, latitude: Double, longitude: Double) {
+        guard self.session == session, activeReturn == nil, placeID > 0 else { return }
         let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-        guard self.session == session, placeID > 0, latitude.isFinite, longitude.isFinite,
-              CLLocationCoordinate2DIsValid(coordinate) else { return }
-        if let target, target.placeID == placeID, target.location.coordinate.latitude == latitude,
-           target.location.coordinate.longitude == longitude { return }
-        target = Target(placeID: placeID, location: CLLocation(latitude: latitude, longitude: longitude),
+        guard latitude.isFinite, longitude.isFinite, CLLocationCoordinate2DIsValid(coordinate) else { return }
+        select(.place(placeID), coordinate: coordinate)
+    }
+
+    func startReturn(session: Int, latitude: Double, longitude: Double) {
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard latitude.isFinite, longitude.isFinite, CLLocationCoordinate2DIsValid(coordinate) else { return }
+        // 已授權且正在定位時沿用同一個 manager，切換目的地或行程都須重新收兩筆。
+        if self.session != session {
+            self.session = session
+            target = nil
+            lastFix = .distantPast
+        }
+        select(.returnPoint, coordinate: coordinate)
+        connectIfNeeded()
+    }
+
+    private func select(_ destination: Destination, coordinate: CLLocationCoordinate2D) {
+        if let target, target.destination == destination,
+           target.location.coordinate.latitude == coordinate.latitude,
+           target.location.coordinate.longitude == coordinate.longitude { return }
+        target = Target(destination: destination,
+                        location: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude),
                         selectedAt: Date())
-        previousInsideFix = nil
+        arrivalCheck = WalkArrivalCheck()
         if let manager, !manager.allowsBackgroundLocationUpdates {
             manager.allowsBackgroundLocationUpdates = true
             manager.showsBackgroundLocationIndicator = true
@@ -63,7 +93,7 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
         disconnect()
         session = nil
         target = nil
-        previousInsideFix = nil
+        arrivalCheck = WalkArrivalCheck()
     }
 
     func setForeground(_ active: Bool) {
@@ -166,20 +196,21 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
         for fix in locations {
             let age = now.timeIntervalSince(fix.timestamp)
             let backgroundFix = !foreground || (lastBackgroundStart <= fix.timestamp && fix.timestamp <= lastForegroundStart)
-            let maxAge: TimeInterval = target != nil && backgroundFix ? Self.arrivalWindow : 2
+            let maxAge: TimeInterval = target != nil && backgroundFix ? WalkArrivalCheck.window : 2
             guard fix.timestamp > lastFix, (0...maxAge).contains(age),
                   CLLocationCoordinate2DIsValid(fix.coordinate), fix.horizontalAccuracy >= 0 else { continue }
             lastFix = fix.timestamp
-            if let target, let session, fix.timestamp >= target.selectedAt {
-                let accuracy = fix.horizontalAccuracy
-                let inside = accuracy <= 40 && fix.distance(from: target.location) <= min(25 + accuracy / 2, 40)
-                if inside, let previousInsideFix, now.timeIntervalSince(previousInsideFix) <= Self.arrivalWindow {
-                    let wasInBackground = !foreground
-                    end()
-                    onArrival?(session, target.placeID, wasInBackground)
-                    return
+            if let target, let session,
+               arrivalCheck.confirms(distance: fix.distance(from: target.location), accuracy: fix.horizontalAccuracy,
+                                     timestamp: fix.timestamp, now: now, since: max(target.selectedAt, preferences.radiusChangedAt),
+                                     radius: preferences.arrivalRadius) {
+                let wasInBackground = !foreground
+                end()
+                switch target.destination {
+                case .place(let id): onArrival?(session, id, wasInBackground)
+                case .returnPoint: onReturnArrival?(session, wasInBackground)
                 }
-                previousInsideFix = inside ? fix.timestamp : nil
+                return
             }
             guard foreground && age <= 2 else { continue }
             let coords: [String: Any] = [
