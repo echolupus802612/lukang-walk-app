@@ -24,6 +24,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
     private var tripWentIntoBackground = false
     private var previousVisits: (real: [Int], simulated: [Int]) = ([], [])
     private var previousReceipt: WalkProgress.Arrival?
+    private var capturedPreviousVisits = false
     private var journalPreparation: Task<Void, Error>?
     private var journalPrepared = false
     private static let photoScript: String = {
@@ -67,9 +68,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        previousVisits = progress.visitedPlaces
-        previousReceipt = progress.pendingArrival
-        do { try journal.interruptWalking(except: previousReceipt?.token) }
+        do { try capturePreviousVisits() }
         catch { deferredLocationError = ["type": "storeError"] }
         location.onEvent = { [weak self] event in
             guard let self else { return }
@@ -178,8 +177,10 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
                                        distanceIncomplete: inBackground || tripWentIntoBackground)
         }
         catch { if foreground && pageReady { send(["type": "storeError"]) } }
-        guard let arrival = progress.pendingArrival else { return }
-        endTrip(id: arrival.token, status: .arrived, date: arrival.date, stop: progress.visitedPlaces.real.count)
+        let receipt = progress.pendingArrival.flatMap { $0.token == visitID ? $0 : nil }
+        endTrip(id: visitID, status: .arrived, date: receipt?.date,
+                stop: receipt == nil ? nil : progress.visitedPlaces.real.count)
+        guard let arrival = receipt else { return }
         if inBackground || view.window?.windowScene?.activationState != .foregroundActive {
             postArrivalNotification(arrival.token)
         } else {
@@ -341,7 +342,17 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         journalPrepared = true
     }
 
+    private func capturePreviousVisits() throws {
+        guard !capturedPreviousVisits else { return }
+        try progress.ensureLoaded()
+        previousVisits = progress.visitedPlaces
+        previousReceipt = progress.pendingArrival
+        try journal.interruptWalking(except: previousReceipt?.token ?? activeTrip?.id)
+        capturedPreviousVisits = true
+    }
+
     private func importPreviousWalks() async throws {
+        try capturePreviousVisits()
         let pending = previousReceipt
         guard journal.needsMigration || pending != nil else { return }
         let photos = journal.needsMigration ? try await album.savedVisits() : []
@@ -424,7 +435,8 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
               let placeID = fields["placeID"] as? Int, placeID > 0,
               let name = fields["name"] as? String, !name.isEmpty,
               let date = fields["date"] as? String, let simulated = fields["isSimulated"] as? Bool else { return }
-        let visit = WalkPhotoAlbum.Visit(id: id, placeID: placeID, name: name, date: date, isSimulated: simulated)
+        let visit = WalkPhotoAlbum.Visit(id: UUID().uuidString, placeID: placeID, name: name, date: date,
+                                         isSimulated: simulated, tripID: id)
         let originalPage = pageGeneration
         let capture = WalkPhotoCaptureController(place: name, save: { [weak self] photo in
             guard let self else { throw CocoaError(.userCancelled) }
@@ -444,7 +456,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         }, onSaved: { [weak self] in
             guard let self else { return }
             NotificationCenter.default.post(name: .walkJournalDidChange, object: nil)
-            self.album.present(from: self, showing: id)
+            self.album.present(from: self, showing: visit.id)
         })
         present(UINavigationController(rootViewController: capture), animated: true)
     }

@@ -24,15 +24,26 @@ final class WalkProgress {
     private let folder: URL
     private let file: URL
     private var values = Values()
+    private var loaded = false
 
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         folder = support.appendingPathComponent("Walk", isDirectory: true)
         file = folder.appendingPathComponent("footprints.json")
-        if let data = try? Data(contentsOf: file),
-           let saved = try? JSONDecoder().decode(Values.self, from: data), saved.ver == 2 {
+        try? ensureLoaded()
+    }
+
+    // 只有找不到舊檔案時才從空足跡開始。受保護或讀不到的舊檔案必須留待重試。
+    func ensureLoaded() throws {
+        guard !loaded else { return }
+        do {
+            let saved = try JSONDecoder().decode(Values.self, from: Data(contentsOf: file))
+            guard saved.ver == 2 else { throw CocoaError(.fileReadCorruptFile) }
             values = saved
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+            values = Values()
         }
+        loaded = true
     }
 
     var initialScript: String {
@@ -54,6 +65,7 @@ final class WalkProgress {
     }
 
     func recordArrival(placeID: Int, session: Int, visitID: String, distanceIncomplete: Bool) throws {
+        try ensureLoaded()
         if !values.seen.contains(placeID) { values.seen.append(placeID) }
         values.recent.removeAll { $0 == placeID }
         values.recent.insert(placeID, at: 0)
@@ -68,12 +80,14 @@ final class WalkProgress {
     }
 
     func acknowledgeArrival(_ token: String) throws {
+        try ensureLoaded()
         guard pendingArrival?.token == token else { return }
         values.pendingArrival = nil
         try persist()
     }
 
     func save(_ changes: [String: Any]) throws {
+        try ensureLoaded()
         var next = values
         for (key, value) in changes {
             switch (key, value) {

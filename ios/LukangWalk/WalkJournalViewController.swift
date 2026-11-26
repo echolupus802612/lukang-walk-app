@@ -336,7 +336,7 @@ private final class WalkJournalDetail: UITableViewController {
         case .map:
             guard let coordinate = entry.mapCoordinate else { return }
             let controller = UIViewController()
-            controller.title = entry.journalTitle
+            controller.title = "地點地圖"
             let map = MKMapView()
             map.accessibilityIdentifier = "walkJournalPlaceMap"
             let pin = MKPointAnnotation()
@@ -345,6 +345,7 @@ private final class WalkJournalDetail: UITableViewController {
             map.addAnnotation(pin)
             map.setRegion(MKCoordinateRegion(center: coordinate, latitudinalMeters: 650, longitudinalMeters: 650),
                           animated: false)
+            map.selectAnnotation(pin, animated: false)
             controller.view = map
             navigationController?.pushViewController(controller, animated: true)
         case .photo(let index): album.present(from: self, showing: photos[index].id)

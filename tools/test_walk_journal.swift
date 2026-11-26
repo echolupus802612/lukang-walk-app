@@ -58,8 +58,11 @@ struct WalkJournalTests {
         func photo(_ id: String, _ site: Int = 2, tripID: String? = nil) -> WalkPhotoAlbum.Visit {
             .init(id: id, placeID: site, name: "老街", date: "2026.11.25", isSimulated: false, tripID: tripID)
         }
+        let walking = UUID().uuidString
+        try reopened.begin(id: walking, placeID: 3, name: "巷口", isSimulated: false, latitude: 24, longitude: 120)
         let first = UUID().uuidString, second = UUID().uuidString, extra = UUID().uuidString
-        let visits = [photo(first), photo(second), photo(stopped, 3), photo(abandoned, 3), photo(extra, 3, tripID: stopped)]
+        let visits = [photo(first), photo(second), photo(pending, 3), photo(walking, 3), photo(stopped, 3),
+                      photo(abandoned, 3), photo(extra, 3, tripID: stopped)]
         // Force a real failure on the second entry after the first file is already on disk.
         let obstruction = folder.appendingPathComponent(second + ".json", isDirectory: true)
         try manager.createDirectory(at: obstruction, withIntermediateDirectories: false)
@@ -82,6 +85,7 @@ struct WalkJournalTests {
         check(legacy.allSatisfy { $0.date.isEmpty && $0.startedAt == nil && $0.endedAt == nil }, "legacy locations have no trip dates")
         try check(retry.entry(id: first)?.note == "第一張照片" && retry.entry(id: extra) == nil, "migration preserves edits and ignores extra photos")
         try check(retry.entry(id: stopped)?.status == .stopped && retry.entry(id: abandoned)?.status == .interrupted, "photos alone cannot complete an existing trip")
+        try check(retry.entry(id: walking)?.status == .walking && retry.entry(id: pending) == recovered, "live walk and receipt retain their own state")
         print("WalkJournalStore persistence and migration tests passed")
     }
 }

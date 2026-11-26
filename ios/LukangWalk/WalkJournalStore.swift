@@ -164,7 +164,16 @@ final class WalkJournalStore {
         for visit in photoVisits where visit.tripID == nil {
             // 新版途中也能留照；已有逐趟紀錄時，以該趟的實際狀態為準。
             let key = try Self.key(visit.id)
-            guard cached[key] == nil else { continue }
+            if var existing = cached[key] {
+                // 舊回條可能沒有日期；同趟同地的到站照片保留了日曆日期。
+                if existing.status == .arrived, existing.date.isEmpty,
+                   existing.placeID == visit.placeID, existing.isSimulated == visit.isSimulated,
+                   let date = knownDay(visit.date) {
+                    existing.date = date
+                    if try write(existing) { changed = true }
+                }
+                continue
+            }
             let site = place(visit.placeID)
             let record = arrival(id: visit.id, placeID: visit.placeID, name: visit.name,
                                  simulated: visit.isSimulated, date: visit.date,

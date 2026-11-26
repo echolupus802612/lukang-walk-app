@@ -314,6 +314,11 @@ final class WalkUITests: XCTestCase {
             XCTAssertFalse(detail.staticTexts["出發時間"].exists)
             XCTAssertFalse(detail.cells["walkJournalAddPhoto"].exists)
             XCTAssertTrue(detail.cells["walkJournalMap"].exists)
+            if round == 0 {
+                detail.cells["walkJournalMap"].tap()
+                XCTAssertTrue(app.navigationBars["地點地圖"].waitForExistence(timeout: 8))
+                XCTAssertTrue(app.maps.firstMatch.waitForExistence(timeout: 8))
+            }
             app.terminate()
         }
         #endif

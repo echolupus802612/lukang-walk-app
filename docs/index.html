@@ -534,7 +534,9 @@ function listenToNative(session, finishFirstFix){
           tick();
         }
         break;
-      case 'pause': resetFixes(); break;
+      case 'pause':
+        if (nativeJournal && tripID && !S.sim) previousLegs=null;
+        resetFixes(); break;
       case 'error':
         if (finishFirstFix?.(false)){S.locationFailure=detail.reason;break}
         if (S.phase==='arrived'){stopSensors(); S.started=false;break}
@@ -768,7 +770,7 @@ function receiveWalkEvent({detail}){
   presentingToken=token;
   Object.assign(appValues,{seen:detail.seen,recent:detail.recent});
   if (tripID && tripID!==token) finishJournal('interrupted');
-  if (session!==currentSession) S.walked=null;
+  if (session!==currentSession || (nativeJournal && detail.distanceIncomplete===true)) S.walked=null;
   stopSensors(false);
   S.sim=false;
   // 換地點與到達可能同時發生；以手機已經記錄的地點揭曉。
