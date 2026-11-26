@@ -332,11 +332,15 @@ private final class WalkPhotoDetail: UIViewController {
             do {
                 let copy = try await files.sharableCard(record)
                 guard viewIfLoaded?.window != nil else { await files.discardShare(copy); return }
-                let sheet = UIActivityViewController(activityItems: [copy], applicationActivities: nil)
+                let words = WalkShareCaption(place: record.visit.name)
+                let sheet = UIActivityViewController(activityItems: [copy, words], applicationActivities: nil)
                 sheet.popoverPresentationController?.sourceView = shareButton
                 sheet.popoverPresentationController?.sourceRect = shareButton.bounds
-                sheet.completionWithItemsHandler = { [files] _, _, _, _ in
+                sheet.completionWithItemsHandler = { [weak self, files] type, done, _, _ in
                     Task { await files.discardShare(copy) }
+                    if done, let type, WalkShareCaption.isInstagram(type) {
+                        self?.caption.text = "說明文字已複製，可以貼到 Instagram 的貼文說明。"
+                    }
                 }
                 present(sheet, animated: true)
             } catch {
@@ -345,5 +349,40 @@ private final class WalkPhotoDetail: UIViewController {
                 present(alert, animated: true)
             }
         }
+    }
+}
+
+/// 透卡附帶的貼文文字：地點、話題與網頁版網址，依分享對象調整。
+/// 圖片一定附上；Instagram 的分享不收文字，改成先複製，讓使用者貼到說明欄。
+final class WalkShareCaption: NSObject, UIActivityItemSource {
+    static let link = "https://echolupus802612.github.io/lukang-walk/"
+    private let text: String
+
+    init(place: String) {
+        text = "今天散步到了\(place)。#散步吧\n\(Self.link)"
+    }
+
+    static func isInstagram(_ type: UIActivity.ActivityType) -> Bool {
+        type.rawValue.lowercased().contains("instagram")
+    }
+
+    func activityViewControllerPlaceholderItem(_ controller: UIActivityViewController) -> Any { "" }
+
+    func activityViewController(_ controller: UIActivityViewController,
+                                itemForActivityType type: UIActivity.ActivityType?) -> Any? {
+        guard let type else { return text }
+        if Self.isInstagram(type) {
+            UIPasteboard.general.string = text
+            return nil
+        }
+        // 存到相簿、複製、列印這類只處理圖片的動作，不附文字，免得混進去。
+        let imageOnly: [UIActivity.ActivityType] = [.saveToCameraRoll, .copyToPasteboard, .print,
+                                                    .assignToContact, .markupAsPDF, .addToReadingList]
+        return imageOnly.contains(type) ? nil : text
+    }
+
+    func activityViewController(_ controller: UIActivityViewController,
+                                subjectForActivityType type: UIActivity.ActivityType?) -> String {
+        "散步吧透卡"
     }
 }
