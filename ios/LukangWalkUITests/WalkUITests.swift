@@ -153,13 +153,31 @@ final class WalkUITests: XCTestCase {
         XCTAssertEqual(status.label, saved)
     }
 
+    /// 等元素出現；逾時就留下整個螢幕的截圖與畫面結構再判定失敗，方便看出當時實際停在哪個畫面。
+    @MainActor
+    @discardableResult
+    private func waitOrRecord(_ element: XCUIElement, in app: XCUIApplication, timeout: TimeInterval,
+                              _ name: String, file: StaticString = #filePath, line: UInt = #line) -> Bool {
+        if element.waitForExistence(timeout: timeout) { return true }
+        let screen = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screen.name = "\(name)：逾時當下的螢幕"
+        screen.lifetime = .keepAlways
+        add(screen)
+        let tree = XCTAttachment(string: app.debugDescription)
+        tree.name = "\(name)：逾時當下的畫面結構"
+        tree.lifetime = .keepAlways
+        add(tree)
+        XCTFail("\(name)：\(Int(timeout)) 秒內沒有出現", file: file, line: line)
+        return false
+    }
+
     @MainActor
     private func selectPhotoFromSystemLibrary(_ app: XCUIApplication) {
         let library = app.buttons["從相簿選取"]
         XCTAssertTrue(library.waitForExistence(timeout: 5))
         library.tap()
         let grid = app.otherElements["PXGGridLayout-Group"].firstMatch
-        XCTAssertTrue(grid.waitForExistence(timeout: 10), app.debugDescription)
+        guard waitOrRecord(grid, in: app, timeout: 10, "系統相片選擇器") else { return }
         let frame = grid.frame
         // iPhone 16 的系統選擇器每列三張，剛加入的測試圖在左上角。
         let center = CGPoint(x: frame.minX + frame.width / 6, y: frame.minY + frame.width / 6)
@@ -237,7 +255,7 @@ final class WalkUITests: XCTestCase {
         app.terminate()
         app.launch()
         let journal = game.buttons["散步筆記"]
-        XCTAssertTrue(journal.waitForExistence(timeout: 15))
+        waitOrRecord(journal, in: app, timeout: 15, "重新開啟後的「散步筆記」分頁")
         journal.tap()
         let row = app.tables["walkJournalList"].cells.matching(NSPredicate(
             format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "walkJournalEntry-", placeName
