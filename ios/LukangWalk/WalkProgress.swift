@@ -1,8 +1,12 @@
 import Foundation
 
-// Only counts, permanent place IDs and the voice setting can enter this file.
-// The changing bundle path after an app update has no bearing on its location.
 final class WalkProgress {
+    struct Arrival: Codable {
+        let placeID: Int
+        let session: Int
+        let token: String
+    }
+
     private struct Values: Codable {
         var ver = 2
         var voice = true
@@ -12,6 +16,7 @@ final class WalkProgress {
         var sim_drawn = 0
         var sim_seen: [Int] = []
         var sim_recent: [Int] = []
+        var pendingArrival: Arrival?
     }
 
     private let folder: URL
@@ -31,7 +36,30 @@ final class WalkProgress {
     var initialScript: String {
         let data = try? JSONEncoder().encode(values)
         let json = data.flatMap { String(data: $0, encoding: .utf8) } ?? "{\"ver\":2}"
-        return "window.lukangInitialStore = " + json + ";"
+        return "window.lukangInitialStore = " + json + "; window.lukangBackgroundWalk = true;"
+    }
+
+    var pendingArrival: Arrival? { values.pendingArrival }
+
+    var arrivalEvent: [String: Any]? {
+        guard let arrival = pendingArrival else { return nil }
+        return ["type": "arrival", "session": arrival.session, "placeID": arrival.placeID,
+                "token": arrival.token, "seen": values.seen, "recent": values.recent]
+    }
+
+    func recordArrival(placeID: Int, session: Int) throws {
+        if !values.seen.contains(placeID) { values.seen.append(placeID) }
+        values.recent.removeAll { $0 == placeID }
+        values.recent.insert(placeID, at: 0)
+        values.recent = Array(values.recent.prefix(12))
+        values.pendingArrival = Arrival(placeID: placeID, session: session, token: UUID().uuidString)
+        try persist()
+    }
+
+    func acknowledgeArrival(_ token: String) throws {
+        guard pendingArrival?.token == token else { return }
+        values.pendingArrival = nil
+        try persist()
     }
 
     func save(_ changes: [String: Any]) throws {
@@ -50,11 +78,15 @@ final class WalkProgress {
         }
         // Retain the latest state in memory so a later successful write can also save a failed one.
         values = next
+        try persist()
+    }
+
+    private func persist() throws {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var localFolder = folder
         var attributes = URLResourceValues()
         attributes.isExcludedFromBackup = true
         try localFolder.setResourceValues(attributes)
-        try JSONEncoder().encode(next).write(to: file, options: .atomic)
+        try JSONEncoder().encode(values).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 }

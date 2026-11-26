@@ -51,6 +51,7 @@ python -B tools/android_content.py --revision 3 --output android/build/content-s
 
 - **在桌前試玩**。在 **Product → Scheme → Edit Scheme → Run → Arguments** 新增 `-simulate-walk`，用 Debug 組態執行。選「近」並按「出門散步吧」，按住「▲ 往目的地走」直到地點卡出現，按「再走一趟」即可繼續。移除參數後，下一次啟動會使用手機定位。
 - **實地試走**。出發時允許「使用 App 期間」與「準確位置」。實走用 iPhone 的定位與指南針，方向不可靠時改顯示絕對方位。到達後或按「收工」會關閉感測器與螢幕常亮。實走與模擬的足跡分開存在 App。
+- **鎖定螢幕後接收到站提醒**。iPhone 1.2 在選好實走目的地時會詢問是否允許通知。允許後即可鎖定螢幕或切換 App，抵達時會收到本機通知，點一下可揭曉地點。拒絕通知仍可散步，稍後可到 iPhone 設定開啟通知。實走期間請保留定位權限；若從 App 切換器強制關閉散步吧，這趟定位會結束。通知的提示方式依 iPhone 的通知及專注模式設定而定。
 - **更新內容**。改動畫面或地點後執行 `python -B tools/build_page.py .`。改動照片、署名或字型授權後，執行 `python -B tools/build_ios_credits.py`。若新增介面用字或地點簡介，可用 `tools/build_fonts.py` 更新離線字型所收錄的字元。
 
 Mac 可在專案根目錄用以下命令檢查模擬器建置。

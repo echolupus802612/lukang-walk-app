@@ -3,21 +3,56 @@ import Foundation
 
 // Core Location delivers delegate calls on the run loop where the manager was created (here, main).
 final class WalkLocation: NSObject, CLLocationManagerDelegate {
+    // 系統偶爾會一次送來多筆背景定位；確認抵達的兩筆讀值都須在最近半分鐘內。
+    private static let arrivalWindow: TimeInterval = 30
+
+    private struct Target {
+        let placeID: Int
+        let location: CLLocation
+        let selectedAt: Date
+    }
+
     var onEvent: (([String: Any]) -> Void)?
+    var onArrival: ((Int, Int, Bool) -> Void)?
     private var session: Int?
+    private var target: Target?
+    private var previousInsideFix: Date?
     private var manager: CLLocationManager?
     private var foreground = false
     private var lastFix = Date.distantPast
+    private var lastBackgroundStart = Date.distantFuture
+    private var lastForegroundStart = Date.distantPast
     private var headingStartedAt = Date.distantPast
     private var requestedPermission = false
     private var updating = false
-    private var resumedSession = false
+
+    var activeTarget: (session: Int, placeID: Int)? {
+        guard let session, let target else { return nil }
+        return (session, target.placeID)
+    }
 
     func start(_ session: Int) {
         guard self.session != session else { return }
         end()
         self.session = session
+        lastFix = .distantPast
         connectIfNeeded()
+    }
+
+    func setTarget(session: Int, placeID: Int, latitude: Double, longitude: Double) {
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard self.session == session, placeID > 0, latitude.isFinite, longitude.isFinite,
+              CLLocationCoordinate2DIsValid(coordinate) else { return }
+        if let target, target.placeID == placeID, target.location.coordinate.latitude == latitude,
+           target.location.coordinate.longitude == longitude { return }
+        target = Target(placeID: placeID, location: CLLocation(latitude: latitude, longitude: longitude),
+                        selectedAt: Date())
+        previousInsideFix = nil
+        if let manager, !manager.allowsBackgroundLocationUpdates {
+            manager.allowsBackgroundLocationUpdates = true
+            manager.showsBackgroundLocationIndicator = true
+            if foreground && updating { manager.startUpdatingLocation() }
+        }
     }
 
     func stop(_ session: Int) {
@@ -27,16 +62,30 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
     func end() {
         disconnect()
         session = nil
-        resumedSession = false
+        target = nil
+        previousInsideFix = nil
     }
 
     func setForeground(_ active: Bool) {
         guard foreground != active else { return }
         foreground = active
+        guard session != nil else { return }
         if active {
-            connectIfNeeded()
+            lastForegroundStart = Date()
+            emit(["type": "pause"])
+            if let manager {
+                headingStartedAt = Date()
+                emit(["type": "heading", "degrees": NSNull()])
+                if updating && CLLocationManager.headingAvailable() { manager.startUpdatingHeading() }
+                applyAuthorization(manager)
+            } else {
+                lastFix = Date()
+                connectIfNeeded()
+            }
+        } else if target != nil {
+            lastBackgroundStart = Date()
+            manager?.stopUpdatingHeading()
         } else {
-            resumedSession = session != nil
             disconnect()
         }
     }
@@ -45,6 +94,8 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
         manager?.delegate = nil
         manager?.stopUpdatingLocation()
         manager?.stopUpdatingHeading()
+        manager?.allowsBackgroundLocationUpdates = false
+        manager?.showsBackgroundLocationIndicator = false
         manager = nil
         updating = false
         requestedPermission = false
@@ -60,14 +111,9 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
         manager.distanceFilter = kCLDistanceFilterNone
         manager.pausesLocationUpdatesAutomatically = false
         manager.headingOrientation = .portrait
+        manager.allowsBackgroundLocationUpdates = target != nil
+        manager.showsBackgroundLocationIndicator = target != nil
         headingStartedAt = Date()
-        if resumedSession {
-            lastFix = Date()
-            emit(["type": "pause"])
-            resumedSession = false
-        } else {
-            lastFix = .distantPast
-        }
         emit(["type": "heading", "degrees": NSNull()])
         applyAuthorization(manager)
     }
@@ -80,15 +126,16 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
     }
 
     private func fail(_ reason: String) {
-        emit(["type": "error", "reason": reason])
+        guard let session else { return }
         end()
+        onEvent?(["type": "error", "reason": reason, "session": session])
     }
 
     private func applyAuthorization(_ manager: CLLocationManager) {
         guard self.manager === manager else { return }
         switch manager.authorizationStatus {
         case .notDetermined:
-            if !requestedPermission {
+            if foreground && !requestedPermission {
                 requestedPermission = true
                 manager.requestWhenInUseAuthorization()
             }
@@ -100,7 +147,7 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
             if !updating {
                 updating = true
                 manager.startUpdatingLocation()
-                if CLLocationManager.headingAvailable() { manager.startUpdatingHeading() }
+                if foreground && CLLocationManager.headingAvailable() { manager.startUpdatingHeading() }
             }
         case .restricted, .denied:
             fail("denied")
@@ -118,9 +165,23 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
         let now = Date()
         for fix in locations {
             let age = now.timeIntervalSince(fix.timestamp)
-            guard fix.timestamp > lastFix, (0...2).contains(age),
+            let backgroundFix = !foreground || (lastBackgroundStart <= fix.timestamp && fix.timestamp <= lastForegroundStart)
+            let maxAge: TimeInterval = target != nil && backgroundFix ? Self.arrivalWindow : 2
+            guard fix.timestamp > lastFix, (0...maxAge).contains(age),
                   CLLocationCoordinate2DIsValid(fix.coordinate), fix.horizontalAccuracy >= 0 else { continue }
             lastFix = fix.timestamp
+            if let target, let session, fix.timestamp >= target.selectedAt {
+                let accuracy = fix.horizontalAccuracy
+                let inside = accuracy <= 40 && fix.distance(from: target.location) <= min(25 + accuracy / 2, 40)
+                if inside, let previousInsideFix, now.timeIntervalSince(previousInsideFix) <= Self.arrivalWindow {
+                    let wasInBackground = !foreground
+                    end()
+                    onArrival?(session, target.placeID, wasInBackground)
+                    return
+                }
+                previousInsideFix = inside ? fix.timestamp : nil
+            }
+            guard foreground && age <= 2 else { continue }
             let coords: [String: Any] = [
                 "latitude": fix.coordinate.latitude, "longitude": fix.coordinate.longitude,
                 "accuracy": fix.horizontalAccuracy, "speed": fix.speed
@@ -130,7 +191,7 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateHeading heading: CLHeading) {
-        guard self.manager === manager, updating else { return }
+        guard self.manager === manager, foreground, updating else { return }
         let age = Date().timeIntervalSince(heading.timestamp)
         guard heading.timestamp >= headingStartedAt, (0...2).contains(age) else { return }
         let degrees = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
@@ -146,7 +207,8 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
         // locationUnknown is recoverable. Let the page's 12-second first-fix timer govern fallback.
         switch (error as? CLError)?.code {
         case .locationUnknown: return
-        case .headingFailure: emit(["type": "heading", "degrees": NSNull()])
+        case .headingFailure:
+            if foreground { emit(["type": "heading", "degrees": NSNull()]) }
         case .denied: fail("denied")
         default: fail("unavailable")
         }

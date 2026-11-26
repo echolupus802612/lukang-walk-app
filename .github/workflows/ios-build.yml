@@ -127,7 +127,9 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID"
             -derivedDataPath "$RUNNER_TEMP/DerivedData" -parallel-testing-enabled NO
           )
-          xcrun simctl terminate "$SIMULATOR_ID" "$BUNDLE_ID"
+          # 換成乾淨安裝，讓通知權限提示與已送達通知都從這一次驗收開始。
+          xcrun simctl uninstall "$SIMULATOR_ID" "$BUNDLE_ID"
+          xcrun simctl install "$SIMULATOR_ID" "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/LukangWalk.app"
           xcrun simctl privacy "$SIMULATOR_ID" grant location "$BUNDLE_ID"
           xcodebuild test-without-building "${settings[@]}" \
             -resultBundlePath "$RUNNER_TEMP/LukangWalk-Tests.xcresult"

@@ -13,7 +13,9 @@
     <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSRequiresIPhoneOS</key><true/>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>散步時需要你的位置，讓小嚮導指路，走到目的地時揭曉是哪裡。位置只在這支手機上使用。</string>
+    <string>散步時，小嚮導會用你的位置指路。鎖定螢幕或切換 App 後，仍會確認是否抵達。位置只在這支手機上使用。</string>
+    <key>UIBackgroundModes</key>
+    <array><string>location</string></array>
     <key>UILaunchScreen</key>
     <dict><key>UIColorName</key><string>LaunchBackground</string></dict>
     <key>UISupportedInterfaceOrientations</key>

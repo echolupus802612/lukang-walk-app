@@ -1,5 +1,6 @@
 import CoreHaptics
 import UIKit
+import UserNotifications
 import WebKit
 
 private let bridgeName = "lukangWalk"
@@ -21,6 +22,10 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
     private var web: WKWebView!
     private var awake = false
     private var foreground = false
+    private var pageReady = false
+    private var deferredLocationError: [String: Any]?
+    private var notificationSession: Int?
+    private var notificationsUnavailable = false
     private var haptics: CHHapticEngine?
 
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
@@ -43,11 +48,22 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        location.onEvent = { [weak self] event in self?.send(event) }
+        location.onEvent = { [weak self] event in
+            guard let self else { return }
+            if self.foreground && self.pageReady {
+                self.send(event)
+            } else if event["type"] as? String == "error" {
+                self.deferredLocationError = event
+            }
+        }
+        location.onArrival = { [weak self] session, placeID, inBackground in
+            self?.finishWalk(session: session, placeID: placeID, inBackground: inBackground)
+        }
         loadGame()
     }
 
     private func loadGame() {
+        pageReady = false
         guard let index else {
             let label = UILabel()
             label.text = "讀不到散步吧的畫面。請重新安裝 App。"
@@ -81,6 +97,81 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         if !active {
             haptics?.stop(completionHandler: nil)
             haptics = nil
+        } else {
+            restorePage()
+        }
+    }
+
+    private var canPresentWalk: Bool {
+        foreground && pageReady && viewIfLoaded?.window?.windowScene?.activationState == .foregroundActive
+    }
+
+    private func restorePage() {
+        guard canPresentWalk else { return }
+        if let arrival = progress.arrivalEvent {
+            send(arrival)
+        } else if let walk = location.activeTarget {
+            send(["type": "resumeWalk", "session": walk.session, "placeID": walk.placeID])
+            requestArrivalAlerts(for: walk.session)
+        } else if let error = deferredLocationError {
+            deferredLocationError = nil
+            send(error)
+        }
+    }
+
+    private func requestArrivalAlerts(for session: Int) {
+        guard foreground else { return }
+        if notificationSession == session {
+            if notificationsUnavailable { send(["type": "notificationUnavailable", "session": session]) }
+            return
+        }
+        notificationSession = session
+        notificationsUnavailable = false
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] granted, _ in
+            DispatchQueue.main.async {
+                guard let self, self.notificationSession == session else { return }
+                self.notificationsUnavailable = !granted
+                if !granted && self.foreground && self.pageReady && self.location.activeTarget?.session == session {
+                    self.send(["type": "notificationUnavailable", "session": session])
+                }
+            }
+        }
+    }
+
+    private func finishWalk(session: Int, placeID: Int, inBackground: Bool) {
+        awake = false
+        UIApplication.shared.isIdleTimerDisabled = false
+        do { try progress.recordArrival(placeID: placeID, session: session) }
+        catch { if foreground && pageReady { send(["type": "storeError"]) } }
+        guard let arrival = progress.pendingArrival else { return }
+        if inBackground || view.window?.windowScene?.activationState != .foregroundActive {
+            postArrivalNotification(arrival.token)
+        } else {
+            playArrival()
+        }
+        restorePage()
+    }
+
+    private func postArrivalNotification(_ token: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "散步到站了"
+        content.body = "小嚮導已經找到目的地，點一下揭曉這一站。"
+        content.sound = .default
+        let center = UNUserNotificationCenter.current()
+        let app = UIApplication.shared
+        var task = UIBackgroundTaskIdentifier.invalid
+        let endTask = {
+            if task != .invalid { app.endBackgroundTask(task); task = .invalid }
+        }
+        task = app.beginBackgroundTask(withName: "Walk arrival", expirationHandler: endTask)
+        let request = UNNotificationRequest(identifier: token, content: content, trigger: nil)
+        center.add(request) { [weak self] _ in
+            DispatchQueue.main.async {
+                endTask()
+                if let self, self.progress.pendingArrival?.token != token {
+                    center.removeDeliveredNotifications(withIdentifiers: [token])
+                }
+            }
         }
     }
 
@@ -94,8 +185,25 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
               isGameURL(message.frameInfo.request.url),
               let body = message.body as? [String: Any], let action = body["action"] as? String else { return }
         switch action {
+        case "ready":
+            pageReady = true
+            restorePage()
         case "start":
-            if let session = body["session"] as? Int, session > 0 { location.start(session) }
+            guard progress.pendingArrival == nil else { restorePage(); return }
+            if let session = body["session"] as? Int, session > 0 {
+                deferredLocationError = nil
+                notificationSession = nil
+                location.start(session)
+            }
+        case "target":
+            guard let session = body["session"] as? Int, let placeID = body["placeID"] as? Int,
+                  let latitude = body["latitude"] as? Double, let longitude = body["longitude"] as? Double else { return }
+            location.setTarget(session: session, placeID: placeID, latitude: latitude, longitude: longitude)
+            if location.activeTarget?.session == session { requestArrivalAlerts(for: session) }
+        case "arrivalShown":
+            guard canPresentWalk, let token = body["token"] as? String, progress.pendingArrival?.token == token else { return }
+            do { try progress.acknowledgeArrival(token) } catch { send(["type": "storeError"]) }
+            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [token])
         case "stop":
             if let session = body["session"] as? Int { location.stop(session) }
         case "awake":
@@ -134,7 +242,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        location.end()
+        if location.activeTarget == nil { location.end() }
         awake = false
         UIApplication.shared.isIdleTimerDisabled = false
         loadGame()

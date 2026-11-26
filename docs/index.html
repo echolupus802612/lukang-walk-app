@@ -123,6 +123,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   <div class="row" id="walkrow" hidden><button id="redraw">換個地方</button><button id="voice">語音：開</button><button id="stop">收工</button></div>
   <div class="sim" id="sim"><button id="stepTo">▲ 往目的地走</button><button id="stepRand">亂走</button><button id="turn">轉身 90°</button></div>
   <div class="foot" id="foot"></div>
+  <div class="foot" role="status" id="notificationWarning" hidden>這趟散步沒有開啟到達通知，回到這裡仍能查看地點。</div>
   <div class="foot" role="status" id="storageWarning" hidden></div>
   <a id="credits" class="credit" href="https://echolupus802612.github.io/lukang-walk-app-content/credits.html" target="_blank" rel="noopener">資料來源</a>
 </div>
@@ -354,6 +355,7 @@ for (const k in ANIM){ const im=new Image(); im.src=`sprites/${k}.webp`; }  // �
 const still = matchMedia('(prefers-reduced-motion: reduce)');
 const $ = id => document.getElementById(id);
 const native = window.webkit?.messageHandlers?.lukangWalk;
+const backgroundWalk = !!native && window.lukangBackgroundWalk === true;
 const appValues = window.lukangInitialStore || {ver:2};
 function saveValues(values){
   if (native){
@@ -494,16 +496,43 @@ async function keepAwake(){
   }catch(e){}
 }
 // 收工、轉模擬時把定位、指南針、螢幕常亮都關掉；下次出發重新取得（臨時定位失敗的人也能重試）
-function stopSensors(){
+function stopSensors(notifyStop=true){
   if (receiveNative) removeEventListener('lukangNative',receiveNative);
   receiveNative=null;
-  if (native && currentSession!==null) native.postMessage({action:'stop',session:currentSession});
+  if (native && notifyStop && currentSession!==null) native.postMessage({action:'stop',session:currentSession});
   currentSession=null;
+  $('notificationWarning').hidden=true;
   if (native) native.postMessage({action:'awake',enabled:false});
   if (S.watch!==null){ try{ navigator.geolocation.clearWatch(S.watch); }catch(e){} S.watch=null; }
   removeEventListener(orientEv, onOrient);
   if (S.lock){ try{ S.lock.release(); }catch(e){} } S.lock=null;
   resetFixes(); S.acc=0;
+}
+function listenToNative(session, finishFirstFix){
+  receiveNative=({detail})=>{
+    if (currentSession!==session || detail?.session!==session) return;
+    switch(detail.type){
+      case 'position':
+        if (updatePosition(detail)) finishFirstFix?.(true);
+        break;
+      case 'heading':
+        S.heading=Number.isFinite(detail.degrees)?detail.degrees:null;
+        if (S.started && S.phase==='walking'){
+          $('mode').textContent=S.heading===null?'GPS（無指南針）':'GPS 實走';
+          tick();
+        }
+        break;
+      case 'pause': resetFixes(); break;
+      case 'error':
+        if (finishFirstFix?.(false)){S.locationFailure=detail.reason;break}
+        if (S.phase==='arrived'){stopSensors(); S.started=false;break}
+        reset();
+        useSim(detail.reason==='approximate'?'目前只允許大概位置，先在鹿港天后宮前模擬走走。':'定位中斷了，先在鹿港天后宮前模擬走走。');
+        pick();
+        break;
+    }
+  };
+  addEventListener('lukangNative',receiveNative);
 }
 async function startSensors(){
   const session = ++sensorSerial;
@@ -514,35 +543,12 @@ async function startSensors(){
     let waiting=true;
     const timer=setTimeout(()=>finish(false),12000);
     function finish(ok){
-      if (!waiting) return;
+      if (!waiting) return false;
       waiting=false; clearTimeout(timer); res(ok);
+      return true;
     }
     if (native){
-      receiveNative=({detail})=>{
-        if (currentSession!==session || detail?.session!==session) return;
-        switch(detail.type){
-          case 'position':
-            if (updatePosition(detail)) finish(true);
-            break;
-          case 'heading':
-            S.heading=Number.isFinite(detail.degrees)?detail.degrees:null;
-            if (S.started && !waiting){
-              $('mode').textContent=S.heading===null?'GPS（無指南針）':'GPS 實走';
-              tick();
-            }
-            break;
-          case 'pause': resetFixes(); break;
-          case 'error':
-            if (waiting){S.locationFailure=detail.reason;finish(false);break}
-            // 途中失去權限時，改用模擬重新選一個目的地，兩本足跡各自記錄。
-            if (S.phase==='arrived'){stopSensors(); S.started=false;break}
-            reset();
-            useSim(detail.reason==='approximate'?'目前只允許大概位置，先在鹿港天后宮前模擬走走。':'定位中斷了，先在鹿港天后宮前模擬走走。');
-            pick();
-            break;
-        }
-      };
-      addEventListener('lukangNative',receiveNative);
+      listenToNative(session,finish);
       native.postMessage({action:'start',session});
       return;
     }
@@ -574,7 +580,10 @@ async function go(){
     S.started = true; $('go').disabled = true; $('go').textContent='找方向中…';
     if (!S.offer) say('greet'); // 在使用者點按時先開口，iOS 才肯放聲音
     if (S.sim){ S.acc=5; S.heading ??= 0; }
-    const ok = S.sim ? true : await startSensors();
+    const request = S.sim ? null : startSensors();
+    const session = currentSession;
+    const ok = request ? await request : true;
+    if (!S.started || S.phase!=='ready' || session!==currentSession) return;
     if (!S.sim){
       if (!ok){
         S.offer=null;
@@ -602,34 +611,49 @@ function pick(){
     $('go').textContent = n ? '那就走遠一點' : '出門散步吧';
     return;
   }
-  try{ const pre = new Audio(); pre.preload='auto'; pre.src='voice/arrived.mp3'; }catch(e){}
-  if (x.p.ph){ const im = new Image(); im.src = `photos/${x.p.id}.webp`; }   // 走路時先載好，到了直接顯示
-  S.walked = 0; S.walkFrom = S.pos;
-  S.target = x.p; S.startD = x.d; S.saidHalf = S.saidNear = false; S.phase='walking'; S.pickAt = Date.now(); S.lastFarAt = Date.now();
-  S.hits = 0;
   recSet('drawn', rec('drawn',0)+1);
-  $('hint').textContent = '這次要去：' + (HINT[x.p.cat]||HINT.other);
+  showWalk(x.p,x.d);
+  if (backgroundWalk && !S.sim){
+    native.postMessage({action:'target',session:currentSession,placeID:x.p.id,latitude:x.p.lat,longitude:x.p.lng});
+  }
+}
+function showWalk(place,distance){
+  try{ const pre = new Audio(); pre.preload='auto'; pre.src='voice/arrived.mp3'; }catch(e){}
+  if (place.ph){ const im = new Image(); im.src = `photos/${place.id}.webp`; }
+  S.walked=distance===null?null:0; S.walkFrom=S.pos;
+  S.target=place; S.startD=distance; S.saidHalf=false; S.saidNear=false; S.phase='walking';
+  S.pickAt=Date.now(); S.lastFarAt=S.pickAt; S.hits=0;
+  $('hint').textContent = '這次要去：' + (HINT[place.cat]||HINT.other);
   $('bands').hidden = true; $('go').hidden = true; $('walkrow').hidden = false;
+  $('go').disabled=false; $('redraw').disabled=!S.pos;
   $('sim').classList.toggle('on',S.sim);
   void keepAwake();
   tick(true);
 }
 function arrive(){
-  S.phase='arrived'; const t=S.target; clearInterval(simT); simT=null;
-  $('walkrow').hidden = true; $('sim').classList.remove('on');   // 歡呼的 1.8 秒內不能再換地方或收工
+  const t=S.target;
   const previous=rec('seen');
   const seen=previous.includes(t.id)?previous:[...previous,t.id];
   const recent=[t.id,...rec('recent').filter(i=>i!==t.id)].slice(0,12);
   const prefix=S.sim?'sim_':'';
   saveValues({[prefix+'seen']:seen,[prefix+'recent']:recent});
-  S.started=false; stopSensors();
-  document.querySelector('.app').inert=true;
+  stopSensors();
   if (native) native.postMessage({action:'arrived'});
   else try{ navigator.vibrate && navigator.vibrate([60,40,120]); }catch(e){}
+  showArrival(t,seen.length);
+}
+function showArrival(t,count){
+  const walked = S.phase==='walking' && S.target?.id===t.id && S.walked!==null
+    ? Math.max(S.walked,S.startD) : null;
+  S.started=false; S.phase='arrived'; S.target=t;
+  clearInterval(simT); simT=null;
+  $('walkrow').hidden=true; $('sim').classList.remove('on');
+  $('go').disabled=false;
+  document.querySelector('.app').inert=true;
   say('arrived');
-  $('cno').textContent = `第 ${seen.length} 站`;
+  $('cno').textContent = `第 ${count} 站`;
   const now = new Date(), pad = v => String(v).padStart(2, '0');
-  S.memo = {name:t.name, stop:seen.length, area:t.area || '', walked:Math.max(S.walked, S.startD),
+  S.memo = {name:t.name, stop:count, area:t.area || '', walked,
             date:`${now.getFullYear()}.${pad(now.getMonth()+1)}.${pad(now.getDate())}`};
   $('cname').textContent = t.name;
   $('ctag').textContent = TAG[t.tag] || HINT[t.cat] || '';
@@ -638,7 +662,11 @@ function arrive(){
   if (t.ph){ ph.src = `photos/${t.id}.webp`; ph.alt = t.name + '的照片'; ph.hidden = false; }
   else { ph.hidden = true; ph.removeAttribute('src'); }
   clearTimeout(S.cardT);
-  S.cardT = setTimeout(()=>{ if (S.phase!=='arrived') return; $('veil').classList.add('on'); $('again').focus(); }, 1800);   // 先讓他歡呼兩輪再蓋上地點卡
+  S.cardT = setTimeout(()=>{
+    if (S.phase!=='arrived') return;
+    $('veil').classList.add('on'); $('again').focus();
+    acknowledgeVisibleArrival();
+  }, 1800);
 }
 function reset(){
   clearTimeout(S.cardT); S.cardT=0;
@@ -650,14 +678,63 @@ function reset(){
 }
 const statLine = () => `${S.sim?'模擬：':''}出發過 ${rec('drawn',0)} 次 · 到過 ${rec('seen').length} 處`;
 
+// 真實足跡由手機入帳。地點卡顯示後才回覆，讓頁面重載時仍能收到尚未揭曉的地點。
+let presentingToken=null;
+const shownTokens=new Set();
+function acknowledgeVisibleArrival(){
+  if (!presentingToken || document.hidden || !$('veil').classList.contains('on')) return;
+  const token=presentingToken;
+  shownTokens.add(token); presentingToken=null;
+  native.postMessage({action:'arrivalShown',token});
+}
+function receiveWalkEvent({detail}){
+  if (!detail) return;
+  const {type,session,placeID,token}=detail;
+  if (type==='notificationUnavailable'){
+    if (session===currentSession && S.phase==='walking' && !S.sim) $('notificationWarning').hidden=false;
+    return;
+  }
+  if (type!=='arrival' && type!=='resumeWalk') return;
+  if (type==='arrival' && shownTokens.has(token)){
+    native.postMessage({action:'arrivalShown',token});
+    return;
+  }
+  if (!Number.isSafeInteger(session) || session<1 || !Number.isSafeInteger(placeID)) return;
+  const place=PLACES.find(p=>p.id===placeID);
+  if (type==='resumeWalk'){
+    // 同一趟的舊快照不能覆蓋剛換好的目的地，或讓已收工的散步重新開始。
+    if (!place || session<sensorSerial || (session===sensorSerial && (currentSession===null || S.phase==='walking'))) return;
+    stopSensors(false);
+    reset();
+    sensorSerial=currentSession=session;
+    S.sim=false; S.started=true; S.pos=null; S.offer=null;
+    listenToNative(session);
+    $('mode').textContent='GPS（無指南針）'; $('dist').textContent='？'; $('sub').textContent='正在取得目前位置…'; $('foot').textContent='';
+    showWalk(place,null);
+    return;
+  }
+  if (typeof token!=='string' || !token || token===presentingToken ||
+      !Array.isArray(detail.seen) || !Array.isArray(detail.recent)) return;
+  sensorSerial=Math.max(sensorSerial,session);
+  presentingToken=token;
+  Object.assign(appValues,{seen:detail.seen,recent:detail.recent});
+  if (session!==currentSession) S.walked=null;
+  stopSensors(false);
+  S.sim=false;
+  // 換地點與到達可能同時發生；以手機已經記錄的地點揭曉。
+  if (!place) S.pos=null;
+  showArrival(place || {id:placeID,name:'先前造訪的地點',desc:'這一站已記入足跡，目前的地點資料沒有收錄這裡。'},detail.seen.length);
+}
+
 /* ---------- 每次位置變化 ---------- */
 function tick(first){
   if (S.phase!=='walking' || !S.pos || !S.target) return;
   const tp=[S.target.lat,S.target.lng], d=dist(S.pos,tp);
+  if (S.startD===null){ S.startD=d; $('redraw').disabled=false; }
   if (S.walkFrom){
     const step = dist(S.walkFrom, S.pos);
     if (step > 80) S.walkFrom = S.pos;
-    else if (step >= 3 && (S.sim || S.acc <= 35)){ S.walked += step; S.walkFrom = S.pos; }
+    else if (step >= 3 && (S.sim || S.acc <= 35)){ if (S.walked!==null) S.walked += step; S.walkFrom = S.pos; }
   } else S.walkFrom = S.pos;
   const [n,u]=fmt(d); $('dist').innerHTML=''; $('dist').append(n); const sm=document.createElement('small'); sm.textContent=u; $('dist').append(sm);
   const blind = S.heading==null;
@@ -669,6 +746,7 @@ function tick(first){
   if (d <= Math.min(ARRIVE+S.acc/2,40)){
     if (S.sim) return arrive();
     if (S.acc > ACC_OK){ S.hits=0; $('sub').textContent='已經很近了，等定位準一點…'; return; }
+    if (backgroundWalk){ $('sub').textContent='已經很近了，確認位置中…'; return; }
     if (S.fixAt !== S.hitFix){ S.hitFix = S.fixAt; S.hits++; }
     if (S.hits >= 2) return arrive();
     $('sub').textContent='已經很近了，確認位置中…'; return;
@@ -772,12 +850,12 @@ $('cam').onchange = async ()=>{
   $('sharev').classList.add('on'); $('shareGo').disabled = true; shareMsg('做成透卡中…');
   const photoUrl = URL.createObjectURL(f);
   try{
-    const m = S.memo, [n,u] = fmt(m.walked);
+    const m = S.memo, distanceLine=m.walked===null?'':'走了 '+fmt(m.walked).join(' ');
     const [photo, sticker, avatar] = await Promise.all([loadImg(photoUrl), loadImg('sprites/cheer.webp'), loadImg('sprites/idle.webp')]);
     const words = m.name + m.area + '散步吧小嚮導走了公里公尺第站' + m.date;
     await Promise.all(['700 40px "LXGW WenKai TC"', '500 40px "LXGW WenKai TC"', '700 40px "Noto Sans TC"', '500 40px "Noto Sans TC"']
       .map(font=>document.fonts.load(font, words).catch(()=>{})));
-    const cv = renderShareCard({photo, sticker, avatar, theme:'brick', name:m.name, stop:m.stop, line:`走了 ${n} ${u}`,
+    const cv = renderShareCard({photo, sticker, avatar, theme:'brick', name:m.name, stop:m.stop, line:distanceLine,
                                 place:m.area, date:m.date});
     const blob = await new Promise(ok=>cv.toBlob(ok, 'image/png'));
     if (!blob) throw new Error('toBlob');
@@ -810,12 +888,17 @@ $('voice').onclick = ()=>{ S.voice=!S.voice; store.set('voice',S.voice); $('voic
   if(!S.voice){ try{speechSynthesis.cancel()}catch(e){} voiceEl.pause(); } };
 document.addEventListener('visibilitychange', ()=>{
   if (document.hidden){clearInterval(simT);simT=null;return}
+  acknowledgeVisibleArrival();
   if (!native && S.started && S.phase==='walking') void keepAwake();
 });
 if (location.hash==='#sim'){ S.forcedSim = true; useSim('模擬模式：按住「往目的地走」前進。'); }
 $('sub').textContent = statLine();
 $('foot').textContent ||= `全台 ${PLACES.length.toLocaleString('zh-TW')} 個地點`;
 requestAnimationFrame(frame);
+if (backgroundWalk){
+  addEventListener('lukangNative',receiveWalkEvent);
+  native.postMessage({action:'ready'});
+}
 }
 </script>
 </body>
