@@ -280,10 +280,10 @@ private final class WalkPhotoDetail: UIViewController {
         view.addSubview(stack)
         let safe = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor),
+            stack.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 18),
+            stack.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -18),
             stack.topAnchor.constraint(equalTo: safe.topAnchor, constant: 12),
-            stack.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -12)
+            stack.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -18)
         ])
         Task {
             do {

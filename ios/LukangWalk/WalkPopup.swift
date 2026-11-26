@@ -63,7 +63,15 @@ final class WalkPopupController: UIViewController, UINavigationControllerDelegat
 
     func navigationController(_ navigationController: UINavigationController, willShow viewController: UIViewController,
                               animated: Bool) {
-        WalkTheme.flatten(viewController.navigationItem)
+        // 返回鍵由前一頁的 backBarButtonItem 決定；先替整疊頁面補上，才能一併拿掉玻璃圓鈕。
+        for screen in navigationController.viewControllers + [viewController] {
+            let item = screen.navigationItem
+            if item.backBarButtonItem == nil {
+                item.backBarButtonItem = UIBarButtonItem(title: "", style: .plain, target: nil, action: nil)
+            }
+            item.backButtonDisplayMode = .minimal
+            WalkTheme.flatten(item)
+        }
     }
 
     override func accessibilityPerformEscape() -> Bool {
