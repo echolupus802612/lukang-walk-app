@@ -140,6 +140,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   <div class="navlinks" id="navlinks" hidden><button id="returnNavigation">帶我回去</button><button id="navigationSettings">導航設定</button></div>
   <div class="footlinks">
     <button id="photoAlbum" hidden>相片足跡</button>
+    <button id="shareWalk" hidden>分享途中</button>
     <button id="journalNote" hidden>記一筆</button>
     <a id="credits" class="credit" href="https://echolupus802612.github.io/lukang-walk-app-content/credits.html" target="_blank" rel="noopener">資料來源</a>
   </div>
@@ -510,7 +511,7 @@ function showWalk(place,distance){
   $('hint').textContent = '這次要去：' + (HINT[place.cat]||HINT.other);
   $('bands').hidden = true; $('go').hidden = true; $('walkrow').hidden = false;
   $('photoAlbum').hidden=true;
-  $('journalNote').hidden=!nativeJournal || !tripID;
+  $('journalNote').hidden=!nativeJournal || !tripID; $('shareWalk').hidden=false;
   $('distanceHint').hidden=!navigation; $('dist').classList.toggle('pressable',navigation);
   $('go').disabled=false; $('redraw').disabled=!S.pos;
   $('sim').classList.toggle('on',S.sim);
@@ -548,7 +549,7 @@ function showArrival(t,count,visitID,arrivalDate){
   $('distanceHint').hidden=true; $('dist').classList.remove('pressable');
   $('walkrow').hidden=true; $('sim').classList.remove('on');
   $('photoAlbum').hidden=true;
-  $('journalNote').hidden=true; $('visitNote').hidden=!nativeJournal || !visitID;
+  $('journalNote').hidden=true; $('shareWalk').hidden=true; $('visitNote').hidden=!nativeJournal || !visitID;
   $('reportPlace').hidden=!(nativePlaceReporting && !S.sim && visitID && visitID===presentingToken);
   $('go').disabled=false;
   document.querySelector('.app').inert=true;
@@ -577,7 +578,7 @@ function reset(){
   $('veil').classList.remove('on'); S.phase='ready'; S.target=null; S.offer=null;
   S.memo=null; tripID=null; previousLegs=0;
   $('reportPlace').hidden=true;
-  $('photoAlbum').hidden=!(nativePhotos || nativeJournal); $('journalNote').hidden=true; $('visitNote').hidden=true;
+  $('photoAlbum').hidden=!(nativePhotos || nativeJournal); $('journalNote').hidden=true; $('shareWalk').hidden=true; $('visitNote').hidden=true;
   $('bands').hidden=false; $('go').hidden=false; $('go').textContent='再走一趟'; $('walkrow').hidden=true;
   $('distanceHint').hidden=true; $('dist').classList.remove('masked','pressable');
   $('sim').classList.remove('on');
@@ -822,6 +823,22 @@ $('stop').onclick = ()=>{ say('bye'); act('bye', 3200);
   if (!S.forcedSim){ S.sim = false; $('foot').textContent = ''; }
   reset(); $('go').textContent = '出門散步吧'; $('mode').textContent = S.sim ? '模擬行走' : '已收工'; };
 $('again').onclick = ()=>{ reset(); $('go').focus(); };
+/* 途中分享：不透露要去哪裡，只說還有多遠；隱藏距離時連距離也不說 */
+function walkShareText(){
+  let left = '';
+  if (!navPrefs.hideDistance && S.pos && S.target){ const [n,u] = fmt(dist(S.pos,[S.target.lat,S.target.lng])); left = `，還有 ${n} ${u}`; }
+  return `小嚮導要帶我去一個還不知道的地方${left} #散步吧`;
+}
+$('shareWalk').onclick = async ()=>{
+  if (S.phase !== 'walking') return;
+  const text = walkShareText();
+  if (native){ native.postMessage({action:'shareText', text}); return; }
+  if (navigator.share){ try{ await navigator.share({text}); }catch(e){} return; }
+  const b = $('shareWalk');
+  try{ await navigator.clipboard.writeText(text); b.textContent = '已複製'; }
+  catch(e){ b.textContent = '無法複製'; }
+  setTimeout(()=>{ b.textContent = '分享途中'; }, 2000);
+};
 if (nativePlaceReporting){
   $('reportPlace').onclick=()=>{
     if ($('reportPlace').hidden || !$('veil').classList.contains('on') || S.phase!=='arrived' || !S.memo) return;

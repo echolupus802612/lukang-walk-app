@@ -344,6 +344,15 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
             if canPresentWalk && presentedViewController == nil { album.present(from: self) }
         case "walkPhoto":
             if let fields = body["visit"] as? [String: Any] { takeWalkPhoto(fields) }
+        case "shareText":
+            // 途中分享：頁面組好不透露目的地的文字，這裡交給系統分享面板。
+            guard canPresentWalk, presentedViewController == nil,
+                  let text = body["text"] as? String, !text.isEmpty, text.count <= 200 else { return }
+            let sheet = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+            sheet.popoverPresentationController?.sourceView = view
+            sheet.popoverPresentationController?.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.maxY - 80,
+                                                                     width: 1, height: 1)
+            present(sheet, animated: true)
         case "store":
             let changes: [String: Any]
             if let batch = body["values"] as? [String: Any] {
