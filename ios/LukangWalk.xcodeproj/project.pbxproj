@@ -11,6 +11,8 @@
 		B10000000000000000000002 /* WalkViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000002 /* WalkViewController.swift */; };
 		B10000000000000000000003 /* WalkLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000003 /* WalkLocation.swift */; };
 		B10000000000000000000004 /* WalkProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000004 /* WalkProgress.swift */; };
+		B10000000000000000000010 /* WalkPhotoCaptureController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000010 /* WalkPhotoCaptureController.swift */; };
+		B10000000000000000000011 /* WalkPhotoAlbum.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000011 /* WalkPhotoAlbum.swift */; };
 		B10000000000000000000005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000005 /* Assets.xcassets */; };
 		B10000000000000000000006 /* credits.html in Web */ = {isa = PBXBuildFile; fileRef = F10000000000000000000006 /* credits.html */; };
 		B10000000000000000000007 /* index.html in Web */ = {isa = PBXBuildFile; fileRef = F10000000000000000000007 /* index.html */; };
@@ -56,6 +58,8 @@
 		F10000000000000000000002 /* WalkViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkViewController.swift; sourceTree = "<group>"; };
 		F10000000000000000000003 /* WalkLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkLocation.swift; sourceTree = "<group>"; };
 		F10000000000000000000004 /* WalkProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkProgress.swift; sourceTree = "<group>"; };
+		F10000000000000000000010 /* WalkPhotoCaptureController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkPhotoCaptureController.swift; sourceTree = "<group>"; };
+		F10000000000000000000011 /* WalkPhotoAlbum.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkPhotoAlbum.swift; sourceTree = "<group>"; };
 		F10000000000000000000005 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F10000000000000000000006 /* credits.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = credits.html; path = Credits/credits.html; sourceTree = "<group>"; };
 		F10000000000000000000007 /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
@@ -106,6 +110,8 @@
 				F10000000000000000000002 /* WalkViewController.swift */,
 				F10000000000000000000003 /* WalkLocation.swift */,
 				F10000000000000000000004 /* WalkProgress.swift */,
+				F10000000000000000000010 /* WalkPhotoCaptureController.swift */,
+				F10000000000000000000011 /* WalkPhotoAlbum.swift */,
 				F10000000000000000000005 /* Assets.xcassets */,
 				F10000000000000000000006 /* credits.html */,
 				F1000000000000000000000C /* Info.plist */,
@@ -229,6 +235,8 @@
 				B10000000000000000000002 /* WalkViewController.swift in Sources */,
 				B10000000000000000000003 /* WalkLocation.swift in Sources */,
 				B10000000000000000000004 /* WalkProgress.swift in Sources */,
+				B10000000000000000000010 /* WalkPhotoCaptureController.swift in Sources */,
+				B10000000000000000000011 /* WalkPhotoAlbum.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -247,9 +255,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.echolupus802612.lukangwalk.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -263,9 +271,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.echolupus802612.lukangwalk.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -309,11 +317,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LukangWalk/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.echolupus802612.lukangwalk;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -328,11 +336,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LukangWalk/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.echolupus802612.lukangwalk;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

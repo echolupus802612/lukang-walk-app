@@ -131,6 +131,21 @@ jobs:
           xcrun simctl uninstall "$SIMULATOR_ID" "$BUNDLE_ID"
           xcrun simctl install "$SIMULATOR_ID" "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/LukangWalk.app"
           xcrun simctl privacy "$SIMULATOR_ID" grant location "$BUNDLE_ID"
+          # 放入系統「照片」，讓測試從標準選擇器挑圖；兩側色塊供重新開啟後核對。
+          python3 - "$RUNNER_TEMP/Walk-Photo-Picker.png" <<'PY'
+          from pathlib import Path
+          import struct, sys, zlib
+
+          def chunk(kind, data):
+              return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+          width, height = 320, 240
+          row = b"\x00" + bytes((232, 46, 69)) * 160 + bytes((20, 182, 206)) * 160
+          header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+          Path(sys.argv[1]).write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header)
+                                        + chunk(b"IDAT", zlib.compress(row * height)) + chunk(b"IEND", b""))
+          PY
+          xcrun simctl addmedia "$SIMULATOR_ID" "$RUNNER_TEMP/Walk-Photo-Picker.png"
           xcodebuild test-without-building "${settings[@]}" \
             -resultBundlePath "$RUNNER_TEMP/LukangWalk-Tests.xcresult"
           xcrun xcresulttool get test-results summary \

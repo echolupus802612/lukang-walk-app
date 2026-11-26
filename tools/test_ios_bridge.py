@@ -3,11 +3,13 @@
 測試依賴：pip install playwright==1.49.1，接著執行 playwright install webkit。
 用法：python tools/test_ios_bridge.py
 """
+import base64
 import json
 import unittest
 from datetime import datetime, timezone
 from math import degrees
 from pathlib import Path
+from uuid import UUID
 
 from playwright.sync_api import sync_playwright
 
@@ -103,6 +105,91 @@ class WalkBridgeTests(unittest.TestCase):
         self.page.add_init_script("window.lukangBackgroundWalk = true;")
         self.page.reload(wait_until="domcontentloaded")
         self.assertEqual(self.messages("ready"), [{"action": "ready"}])
+
+    def enable_walk_photos(self):
+        sprites = {}
+        for name in ("cheer", "idle"):
+            image = (ROOT / f"docs/sprites/{name}.webp").read_bytes()
+            sprites[name] = "data:image/webp;base64," + base64.b64encode(image).decode("ascii")
+        self.page.add_init_script("window.lukangWalkPhotos=true; window.lukangCardSprites=" + json.dumps(sprites))
+        self.enable_background_walk()
+
+    def test_native_photo_album_and_real_visit_render_offline(self):
+        self.enable_walk_photos()
+        self.click("#photoAlbum")
+        self.assertEqual(self.messages("photoAlbum"), [{"action": "photoAlbum"}])
+        visit_id = "79d4648a-3695-450d-a0e0-6c56fb73720f"
+        event = dict(placeID=NANTOU["id"], date="2025.12.31", token=visit_id,
+                     seen=[NANTOU["id"]], recent=[NANTOU["id"]])
+        self.send("arrival", 18, **event)
+        self.assertTrue(self.page.evaluate("id=>lukangRenderWalkCard('',id).then(()=>false,()=>true)", visit_id))
+        self.page.clock.fast_forward(1800)
+        self.click("#snap")
+        self.send("arrival", 18, **event)
+        self.click("#snap")
+        expected = {"action": "walkPhoto", "visit": {"id": visit_id, "placeID": NANTOU["id"],
+                    "name": NANTOU["name"], "date": "2025.12.31", "isSimulated": False}}
+        self.assertEqual(self.messages("walkPhoto"), [expected, expected])
+        self.assertFalse(self.page.locator("#photoAlbum").is_visible())
+        self.assertTrue(self.page.evaluate("()=>lukangRenderWalkCard('','other').then(()=>false,()=>true)"))
+
+        result = self.page.evaluate("""async id=>{
+          const source=document.createElement('canvas'), ctx=source.getContext('2d');
+          ctx.fillStyle='#13cc18';ctx.fillRect(0,0,source.width,source.height);
+          const jpeg=source.toDataURL('image/jpeg').split(',')[1];
+          const png=await lukangRenderWalkCard(jpeg,id);
+          const image=new Image(); image.src='data:image/png;base64,'+png; await image.decode();
+          ctx.drawImage(image,120,520,1,1,0,0,1,1);
+          const pixel=Array.from(ctx.getImageData(0,0,1,1).data);
+          const previous=lukangRenderWalkCard(jpeg,id);
+          document.getElementById('again').click();
+          return {header:png.slice(0,8),size:[image.naturalWidth,image.naturalHeight],pixel,
+                  staleRejected:await previous.then(()=>false,()=>true)};
+        }""", visit_id)
+        self.assertEqual(result["size"], [1080, 1621])
+        self.assertEqual(result["header"], "iVBORw0K")
+        red, green, blue, alpha = result["pixel"]
+        self.assertTrue(green > 180 and red < 70 and blue < 70 and alpha == 255, result["pixel"])
+        self.assertTrue(result["staleRejected"])
+        self.assertTrue(self.page.locator("#photoAlbum").is_visible())
+
+    def test_each_simulated_arrival_has_one_new_photo_id(self):
+        self.enable_walk_photos()
+        session = self.start()
+        self.send("error", session, reason="denied")
+        step = self.page.locator("#stepTo")
+        visits = []
+        for _ in range(2):
+            self.assertFalse(self.page.locator("#photoAlbum").is_visible())
+            step.dispatch_event("pointerdown")
+            for _ in range(500):
+                self.page.clock.fast_forward(100)
+                if self.page.locator("#walkrow").is_hidden():
+                    break
+            step.dispatch_event("pointerup")
+            self.page.clock.fast_forward(1800)
+            self.click("#snap")
+            self.click("#snap")
+            first, second = [m["visit"] for m in self.messages("walkPhoto")[-2:]]
+            self.assertEqual(first, second)
+            self.assertTrue(first["isSimulated"])
+            self.assertEqual(UUID(first["id"]).version, 4)
+            visits.append(first["id"])
+            self.click("#again")
+            if len(visits) == 1:
+                self.click("#go")
+        self.assertNotEqual(*visits)
+
+    def test_photo_hooks_require_native_and_its_capability(self):
+        self.assertFalse(self.page.locator("#photoAlbum").is_visible())
+        self.assertEqual(self.page.evaluate("typeof window.lukangRenderWalkCard"), "undefined")
+        web = self.browser.new_page()
+        self.addCleanup(web.context.close)
+        web.add_init_script("window.lukangWalkPhotos=true")
+        web.goto(ENTRY, wait_until="domcontentloaded")
+        self.assertFalse(web.locator("#photoAlbum").is_visible())
+        self.assertEqual(web.evaluate("typeof window.lukangRenderWalkCard"), "undefined")
+        self.assertFalse(web.locator("#snap").evaluate("button => button.hidden"))
 
     def test_native_arrival_is_authoritative_even_during_redraw(self):
         self.enable_background_walk()
@@ -331,7 +418,7 @@ class WalkBridgeTests(unittest.TestCase):
         step.dispatch_event("pointerup")
         self.page.clock.fast_forward(1800)
         self.assertTrue(self.page.locator('#veil [role="dialog"]').is_visible())
-        # App 版尚未接上相機與原生分享，地點卡不顯示「拍一張留念」
+        # 舊版 iPhone 橋接未提供相片功能，地點卡仍隱藏拍照按鈕。
         self.assertFalse(self.page.locator("#snap").is_visible())
         self.assertEqual(len(self.messages("arrived")), 1)
         saved, = [v for v in self.writes() if "sim_seen" in v]

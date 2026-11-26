@@ -5,6 +5,7 @@ final class WalkProgress {
         let placeID: Int
         let session: Int
         let token: String
+        let date: String?
     }
 
     private struct Values: Codable {
@@ -43,8 +44,10 @@ final class WalkProgress {
 
     var arrivalEvent: [String: Any]? {
         guard let arrival = pendingArrival else { return nil }
-        return ["type": "arrival", "session": arrival.session, "placeID": arrival.placeID,
-                "token": arrival.token, "seen": values.seen, "recent": values.recent]
+        var event: [String: Any] = ["type": "arrival", "session": arrival.session, "placeID": arrival.placeID,
+                                    "token": arrival.token, "seen": values.seen, "recent": values.recent]
+        if let date = arrival.date { event["date"] = date }
+        return event
     }
 
     func recordArrival(placeID: Int, session: Int) throws {
@@ -52,7 +55,12 @@ final class WalkProgress {
         values.recent.removeAll { $0 == placeID }
         values.recent.insert(placeID, at: 0)
         values.recent = Array(values.recent.prefix(12))
-        values.pendingArrival = Arrival(placeID: placeID, session: session, token: UUID().uuidString)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy.MM.dd"
+        values.pendingArrival = Arrival(placeID: placeID, session: session, token: UUID().uuidString,
+                                        date: formatter.string(from: Date()))
         try persist()
     }
 

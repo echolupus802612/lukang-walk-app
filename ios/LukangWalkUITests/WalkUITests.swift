@@ -1,4 +1,5 @@
 import CoreLocation
+import UIKit
 import XCTest
 
 final class WalkUITests: XCTestCase {
@@ -145,6 +146,108 @@ final class WalkUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(status.waitForExistence(timeout: 15))
         XCTAssertEqual(status.label, saved)
+    }
+
+    @MainActor
+    private func selectPhotoFromSystemLibrary(_ app: XCUIApplication) {
+        let photos = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label BEGINSWITH[c] %@ OR label BEGINSWITH %@ OR label BEGINSWITH %@",
+            "Photo,", "照片，", "相片，"
+        ))
+        let pickerCell = app.collectionViews.cells.firstMatch
+        let pickerImage = app.scrollViews.images.firstMatch
+        let photo = photos.firstMatch
+        if photo.waitForExistence(timeout: 5) {
+            photo.tap()
+        } else if pickerCell.exists {
+            pickerCell.tap()
+        } else {
+            XCTAssertTrue(pickerImage.waitForExistence(timeout: 5), app.debugDescription)
+            pickerImage.tap()
+        }
+        let add = app.buttons.matching(NSPredicate(format: "label IN %@", ["Add", "加入", "新增"])).firstMatch
+        if add.waitForExistence(timeout: 2) { add.tap() }
+    }
+
+    @MainActor
+    private func checkSavedPhoto(_ photo: XCUIElement) throws {
+        XCTAssertTrue(photo.waitForExistence(timeout: 10))
+        let image = try XCTUnwrap(photo.screenshot().image.cgImage)
+        let rgb = try XCTUnwrap(CGContext(data: nil, width: 20, height: 20, bitsPerComponent: 8,
+            bytesPerRow: 80, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.noneSkipLast.rawValue))
+        rgb.draw(image, in: CGRect(x: 0, y: 0, width: 20, height: 20))
+        let pixels = try XCTUnwrap(rgb.data).assumingMemoryBound(to: UInt8.self)
+        let left = (10 * 20 + 8) * 4
+        let right = (10 * 20 + 12) * 4
+        XCTAssertTrue(pixels[left] > 160 && pixels[left + 1] < 120 && pixels[left + 2] < 140,
+                      "照片左半應為系統相簿測試圖的紅色")
+        XCTAssertTrue(pixels[right] < 130 && pixels[right + 1] > 140 && pixels[right + 2] > 140,
+                      "照片右半應為系統相簿測試圖的藍綠色")
+    }
+
+    @MainActor
+    func testPhotoPickerPersistsArrivalAndOpensSystemShareSheet() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("這個情境使用預先放入模擬器相簿的測試圖。")
+        #else
+        let device = XCUIDevice.shared
+        let previousLocation = device.location
+        defer { device.location = previousLocation }
+        // 奧萬大自然教育中心（編號 1004）是此起點 500 公尺內唯一的地點。
+        let start = CLLocationCoordinate2D(latitude: 23.955645, longitude: 121.179027)
+        setLocation(start)
+        let app = XCUIApplication()
+        app.launch()
+        startGPSWalk(app, at: start)
+        setLocation(.init(latitude: 23.95376, longitude: start.longitude))
+        Thread.sleep(forTimeInterval: 1.2)
+        setLocation(.init(latitude: 23.95361, longitude: start.longitude))
+        let game = app.webViews.firstMatch
+        let keepPhoto = game.buttons["拍一張留念"]
+        XCTAssertTrue(keepPhoto.waitForExistence(timeout: 15))
+        keepPhoto.tap()
+        let library = app.buttons["從相簿選取"]
+        XCTAssertTrue(library.waitForExistence(timeout: 5))
+        library.tap()
+        selectPhotoFromSystemLibrary(app)
+
+        let placeName = "奧萬大自然教育中心"
+        let card = app.images["walkAlbumCardImage"]
+        XCTAssertTrue(app.navigationBars[placeName].waitForExistence(timeout: 20))
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        let savedCard = XCTAttachment(screenshot: app.screenshot())
+        savedCard.name = "到站保存的小嚮導透卡"
+        savedCard.lifetime = .keepAlways
+        add(savedCard)
+        app.terminate()
+        app.launch()
+        let album = game.buttons["相片足跡"]
+        XCTAssertTrue(album.waitForExistence(timeout: 15))
+        album.tap()
+        let row = app.tables["walkAlbumList"].cells.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "walkAlbumVisit-", placeName
+        )).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.tap()
+        XCTAssertTrue(app.navigationBars[placeName].waitForExistence(timeout: 8))
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        let picker = app.segmentedControls["walkAlbumImagePicker"]
+        picker.buttons["照片"].tap()
+        try checkSavedPhoto(app.images["walkAlbumOriginalImage"])
+        picker.buttons["透卡"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        app.buttons["walkAlbumShare"].tap()
+        let sheet = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier == %@ OR label IN %@", "ActivityListView",
+            ["Copy", "Copy Photo", "Save Image", "Save to Files", "AirDrop", "拷貝", "儲存影像", "儲存到檔案"]
+        )).firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 10), "從足跡詳情開啟 iOS 分享面板")
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "相片足跡的系統分享面板"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+        #endif
     }
 
     @MainActor

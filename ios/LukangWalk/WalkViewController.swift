@@ -18,6 +18,17 @@ private final class WalkMessages: NSObject, WKScriptMessageHandler {
 final class WalkViewController: UIViewController, WKNavigationDelegate {
     private let location = WalkLocation()
     private let progress = WalkProgress()
+    private let album = WalkPhotoAlbum()
+    private static let photoScript: String = {
+        var sprites: [String: String] = [:]
+        for name in ["cheer", "idle"] {
+            guard let file = Bundle.main.url(forResource: name, withExtension: "webp", subdirectory: "Web/sprites"),
+                  let bytes = try? Data(contentsOf: file) else { return "" }
+            sprites[name] = "data:image/webp;base64," + bytes.base64EncodedString()
+        }
+        guard let data = try? JSONEncoder().encode(sprites), let json = String(data: data, encoding: .utf8) else { return "" }
+        return "window.lukangCardSprites = " + json + "; window.lukangWalkPhotos = true;"
+    }()
     private let index = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "Web")
     private var web: WKWebView!
     private var awake = false
@@ -77,7 +88,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         }
         let scripts = web.configuration.userContentController
         scripts.removeAllUserScripts()
-        scripts.addUserScript(WKUserScript(source: progress.initialScript,
+        scripts.addUserScript(WKUserScript(source: progress.initialScript + Self.photoScript,
                                            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         var entry = index
         #if DEBUG
@@ -214,6 +225,10 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
             if foreground { playArrival() }
         case "credits":
             showCredits()
+        case "photoAlbum":
+            if canPresentWalk && presentedViewController == nil { album.present(from: self) }
+        case "walkPhoto":
+            if let fields = body["visit"] as? [String: Any] { takeWalkPhoto(fields) }
         case "store":
             let changes: [String: Any]
             if let batch = body["values"] as? [String: Any] {
@@ -233,6 +248,28 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
     private func send(_ event: [String: Any]) {
         web.callAsyncJavaScript("window.dispatchEvent(new CustomEvent('lukangNative', {detail: event}));",
                                 arguments: ["event": event], in: nil, in: .page, completionHandler: nil)
+    }
+
+    private func takeWalkPhoto(_ fields: [String: Any]) {
+        guard canPresentWalk, presentedViewController == nil,
+              let id = fields["id"] as? String, UUID(uuidString: id) != nil,
+              let placeID = fields["placeID"] as? Int, placeID > 0,
+              let name = fields["name"] as? String, !name.isEmpty,
+              let date = fields["date"] as? String, let simulated = fields["isSimulated"] as? Bool else { return }
+        let visit = WalkPhotoAlbum.Visit(id: id, placeID: placeID, name: name, date: date, isSimulated: simulated)
+        let capture = WalkPhotoCaptureController(place: name, save: { [weak self] photo in
+            guard let self else { throw CocoaError(.userCancelled) }
+            let result = try await self.web.callAsyncJavaScript(
+                "return await window.lukangRenderWalkCard(photo, visitID);",
+                arguments: ["photo": photo.base64EncodedString(), "visitID": id], in: nil, contentWorld: .page)
+            guard let base64 = result as? String, let card = Data(base64Encoded: base64),
+                  card.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) else { throw CocoaError(.fileReadCorruptFile) }
+            try await self.album.save(visit: visit, photo: photo, card: card)
+        }, onSaved: { [weak self] in
+            guard let self else { return }
+            self.album.present(from: self, showing: id)
+        })
+        present(UINavigationController(rootViewController: capture), animated: true)
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
