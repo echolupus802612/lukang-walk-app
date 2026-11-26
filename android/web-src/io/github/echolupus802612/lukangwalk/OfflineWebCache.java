@@ -82,6 +82,18 @@ final class OfflineWebCache {
             }
         }
 
+        boolean hasMobileHome() throws IOException {
+            WebResourceResponse home = response("index.html", null);
+            try (BufferedReader lines = new BufferedReader(new InputStreamReader(home.getData(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = lines.readLine()) != null) {
+                    if (line.contains(WalkMobileBridge.MARKER)) return true;
+                    if (line.contains("<script>")) return false;
+                }
+                return false;
+            }
+        }
+
         WebResourceResponse response(String relativePath, String range) throws IOException {
             String path = "".equals(relativePath) ? "index.html" : relativePath;
             Asset asset = safePath(path) ? files.get(path) : null;
@@ -152,7 +164,7 @@ final class OfflineWebCache {
         @Override public int available() throws IOException { return (int)Math.min(remaining, in.available()); }
     }
 
-    private static String mime(String path) {
+    static String mime(String path) {
         String ext = path.substring(path.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
         switch (ext) {
             case "html": case "htm": return "text/html";
@@ -244,7 +256,8 @@ final class OfflineWebCache {
             try { release = WebRelease.check(previous == null ? null : previous.commit); }
             catch (IOException discoveryUnavailable) {
                 op.check();
-                if (previous != null) throw discoveryUnavailable;
+                // 從舊版升級時，即使版本查詢暫時不可用，也能用新 APK 的已發布清單補齊內容。
+                if (previous != null && previous.hasMobileHome()) throw discoveryUnavailable;
                 try (InputStream seed = bundled.open("offline-seed.tsv")) { release = WebRelease.fromSeed(seed); }
                 catch (IOException unavailable) { discoveryUnavailable.addSuppressed(unavailable); throw discoveryUnavailable; }
             }

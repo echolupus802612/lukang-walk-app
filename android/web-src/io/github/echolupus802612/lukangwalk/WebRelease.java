@@ -57,37 +57,17 @@ final class WebRelease {
     static WebRelease check(String installedCommit) throws IOException {
         checkCancelled();
         try {
-            // 只看 Pages 已發布的 main 提交。只有素材改動時，首頁的雜湊可能完全相同。
-            JSONArray deployments = new JSONArray(api("/deployments?environment=github-pages&ref=main&per_page=8"));
-            for (int i = 0; i < deployments.length(); i++) {
-                checkCancelled();
-                JSONObject item = deployments.getJSONObject(i);
-                String commit = item.getString("sha");
-                if (!HASH.matcher(commit).matches() || !"main".equals(item.getString("ref"))
-                        || !"github-pages".equals(item.getString("environment"))) continue;
-                if (!wasPublished(item.getLong("id"))) continue;
-                if (commit.equals(installedCommit)) return null;
-                WebRelease candidate = fromTree(commit);
-                if (matchesLiveIndex(candidate.files.get("index.html"))) return candidate;
+            // 舊版繼續從 Pages 的 main 更新；新版向專屬分支取出同一提交的網頁與素材。
+            JSONObject ref = new JSONObject(api("/git/ref/heads/android-1.9"));
+            JSONObject object = ref.getJSONObject("object");
+            String commit = object.getString("sha");
+            if (!"commit".equals(object.getString("type")) || !HASH.matcher(commit).matches()) {
+                throw new IOException("Android 內容分支的版本無效。");
             }
+            return commit.equals(installedCommit) ? null : fromTree(commit);
         } catch (JSONException invalid) {
-            throw new IOException("無法辨識網站的發布清單。", invalid);
+            throw new IOException("無法辨識 Android 內容分支。", invalid);
         }
-        throw new IOException("目前無法核對正式網站的版本。");
-    }
-
-    private static boolean wasPublished(long id) throws IOException, JSONException {
-        JSONArray states = new JSONArray(api("/deployments/" + id + "/statuses?per_page=8"));
-        if (states.length() == 0) return false;
-        String latest = states.getJSONObject(0).getString("state");
-        if (!"success".equals(latest) && !"inactive".equals(latest)) return false;
-        for (int i = 0; i < states.length(); i++) {
-            JSONObject state = states.getJSONObject(i);
-            if ("success".equals(state.getString("state")) && SITE.equals(state.optString("environment_url"))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static WebRelease fromTree(String commit) throws IOException, JSONException {
@@ -169,29 +149,27 @@ final class WebRelease {
         return new URL("https://codeload.github.com/" + REPO + "/zip/" + commit);
     }
 
-    private static boolean matchesLiveIndex(Entry index) throws IOException {
-        MessageDigest hash;
-        try { hash = MessageDigest.getInstance("SHA-1"); }
-        catch (NoSuchAlgorithmException impossible) { throw new IOException(impossible); }
-        hash.update(("blob " + index.bytes + "\0").getBytes(StandardCharsets.US_ASCII));
-        HttpURLConnection connection = connect(SITE, false);
-        try (InputStream input = connection.getInputStream()) {
-            byte[] buffer = new byte[16384];
-            long count = 0;
-            int n;
-            while ((n = input.read(buffer)) != -1) {
-                checkCancelled();
-                count += n;
-                if (count > index.bytes) return false;
-                hash.update(buffer, 0, n);
-            }
-            if (count != index.bytes) return false;
-            byte[] digest = hash.digest();
+    /** 尚在準備完整離線包時，線上散步也使用同一個提交並逐檔檢查。 */
+    byte[] onlineFile(String name) throws IOException {
+        Entry entry = files.get(name);
+        if (entry == null || entry.bytes < 1 || entry.bytes > 32L * 1024 * 1024) {
+            throw new IOException("找不到指定的散步素材。");
+        }
+        HttpURLConnection connection = connect(rawUrl(entry).toString(), false);
+        try (InputStream in = connection.getInputStream()) {
+            byte[] data = new byte[(int)entry.bytes];
+            new java.io.DataInputStream(in).readFully(data);
+            if (in.read() != -1) throw new IOException("素材長度不符。");
+            MessageDigest hash;
+            try { hash = MessageDigest.getInstance("SHA-1"); }
+            catch (NoSuchAlgorithmException impossible) { throw new IOException(impossible); }
+            hash.update(("blob " + data.length + "\0").getBytes(StandardCharsets.US_ASCII));
+            byte[] digest = hash.digest(data);
             for (int i = 0; i < digest.length; i++) {
-                int expected = Integer.parseInt(index.gitHash.substring(i * 2, i * 2 + 2), 16);
-                if ((digest[i] & 255) != expected) return false;
+                int expected = Integer.parseInt(entry.gitHash.substring(i * 2, i * 2 + 2), 16);
+                if ((digest[i] & 255) != expected) throw new IOException("素材與發布的版本不符。");
             }
-            return true;
+            return data;
         } finally { connection.disconnect(); }
     }
 

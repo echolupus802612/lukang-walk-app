@@ -26,13 +26,13 @@ def git(repo, *args, check=True):
     return subprocess.run(["git", "-C", str(repo), *args], stdout=subprocess.PIPE, check=check)
 
 
-def checkout(path):
+def checkout(path, branch):
     repo = path.resolve(strict=True)
     if repo == ROOT or ROOT in repo.parents or repo in ROOT.parents:
         raise ValueError("請指定 App 專案以外的獨立成品版本庫。")
     actual = Path(git(repo, "rev-parse", "--show-toplevel").stdout.decode().strip()).resolve()
-    if actual != repo or git(repo, "symbolic-ref", "--short", "HEAD").stdout.strip() != b"main":
-        raise ValueError("請指定成品版本庫的根目錄，並切換至 main 分支。")
+    if actual != repo or git(repo, "symbolic-ref", "--short", "HEAD").stdout.decode().strip() != branch:
+        raise ValueError(f"請指定成品版本庫的根目錄，並切換至 {branch} 分支。")
     for direction in ([], ["--push"]):
         urls = git(repo, "remote", "get-url", *direction, "--all", "origin").stdout.decode().splitlines()
         if not urls or any(url.removesuffix(".git") not in ORIGINS for url in urls):
@@ -139,6 +139,8 @@ def seed(repo, files, output):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--branch", choices=("main", "android-1.9"), default="main",
+                        help="指定已切換的成品分支；1.6 沿用 main，1.9 系列使用 android-1.9")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("prepare", help="同步成品到獨立的本機版本庫").add_argument("checkout", type=Path)
     make_seed = commands.add_parser("seed", help="用已提交的成品產生 Android 下載清單")
@@ -146,7 +148,7 @@ def main():
     make_seed.add_argument("--output", type=Path, default=DEFAULT_SEED)
     args = parser.parse_args()
     try:
-        repo = checkout(args.checkout)
+        repo = checkout(args.checkout, args.branch)
         files = inventory(ROOT / "docs")
         if not (REQUIRED | FONTS).issubset(files) or any(not any(n.startswith(f"{directory}/") for n in files)
                                                          for directory in ("photos", "sprites", "voice")):

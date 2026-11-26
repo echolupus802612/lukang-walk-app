@@ -13,10 +13,10 @@ import android.webkit.WebView;
 import android.widget.Toast;
 import org.json.JSONObject;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.file.Files;
 import java.util.UUID;
 
 /** 只接收目前到站卡的 PNG，位置由系統文件選擇器決定。 */
@@ -134,9 +134,17 @@ final class WalkPhotoExport {
         File saved = file;
         file = null;
         new Thread(() -> {
-            try (OutputStream output = activity.getContentResolver().openOutputStream(dest, "wt")) {
-                if (output == null) throw new IOException("無法開啟檔案");
-                Files.copy(saved.toPath(), output);
+            try (FileInputStream input = new FileInputStream(saved)) {
+                long expected = input.getChannel().size();
+                if (expected == 0) throw new IOException("找不到要儲存的照片");
+                try (OutputStream output = activity.getContentResolver().openOutputStream(dest, "wt")) {
+                    if (output == null) throw new IOException("無法開啟檔案");
+                    byte[] buffer = new byte[32768];
+                    long copied = 0;
+                    int n;
+                    while ((n = input.read(buffer)) != -1) { output.write(buffer, 0, n); copied += n; }
+                    if (copied != expected) throw new IOException("照片未完整寫入");
+                }
             } catch (IOException | RuntimeException failed) {
                 activity.runOnUiThread(() -> {
                     if (saved.getName().endsWith(".jpg")) {

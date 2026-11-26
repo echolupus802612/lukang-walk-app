@@ -8,6 +8,8 @@ import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -40,6 +42,9 @@ import android.widget.Toast;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import org.json.JSONObject;
+import org.json.JSONException;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -58,6 +63,14 @@ public final class WebWalkActivity extends Activity {
     private TextView noticeText;
     private Button applyUpdate;
     private WebView game;
+    private WalkMobileBridge bridge;
+    private WalkMobileNavigation mobileNavigation;
+    private WalkMobileJournal mobileJournal;
+    private WalkMobileActions mobileActions;
+    private boolean mobileReady, upgradeOnline;
+    private OfflineWebCache.Snapshot pageSnapshot;
+    private volatile WebRelease seededRelease;
+    private final ExecutorService spriteWorker = Executors.newSingleThreadExecutor();
     private AlertDialog credits, photoMenu;
     private ValueCallback<Uri[]> photoAnswer;
     private File cameraFile, deliveredPhoto;
@@ -107,6 +120,15 @@ public final class WebWalkActivity extends Activity {
         notice.addView(applyUpdate);
         window.addView(notice, new LinearLayout.LayoutParams(-1, -2));
         setContentView(window);
+        bridge = new WalkMobileBridge(this);
+        mobileJournal = new WalkMobileJournal(this);
+        mobileNavigation = new WalkMobileNavigation(this);
+        mobileActions = new WalkMobileActions(this);
+        mobileActions.refreshTheme();
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::backFromGame);
+        }
         nextPhotoRequest = state == null ? 100 : state.getInt("nextPhotoRequest", 100);
         photoRequest = state == null ? -1 : state.getInt("pendingPhotoRequest", -1);
         cameraFile = state == null ? null : WalkCameraProvider.restore(this, state.getString("cameraFile"));
@@ -143,7 +165,12 @@ public final class WebWalkActivity extends Activity {
     private void findSavedGame() {
         worker.execute(() -> {
             OfflineWebCache.Snapshot found = null;
-            try { found = cache.current(); } catch (IOException ignored) { /* 重新下載可復原。 */ }
+            boolean supportsNative = false;
+            try {
+                found = cache.current();
+                supportsNative = found != null && found.hasMobileHome();
+            } catch (IOException ignored) { /* 重新下載可復原。 */ }
+            final boolean currentHome = supportsNative;
             final OfflineWebCache.Snapshot saved = found;
             main.post(() -> {
                 if (!active()) { if (saved != null) saved.close(); return; }
@@ -151,8 +178,10 @@ public final class WebWalkActivity extends Activity {
                 displayed = saved;
                 online = connected();
                 if (saved != null) {
+                    upgradeOnline = !currentHome && online;
                     loadGame();
-                    if (!online) banner("正在使用已下載的離線內容", false);
+                    if (!online) banner(currentHome ? "正在使用已下載的離線內容"
+                            : "目前使用舊版離線畫面，連線後即可更新散步功能。", false);
                 } else if (online) downloadPanel(); else firstOffline();
                 if (online && foreground) synchronize();
             });
@@ -224,11 +253,11 @@ public final class WebWalkActivity extends Activity {
     }
 
     private void offerApply(boolean fromButton) {
-        if (pending == null || game == null || credits != null || photoAnswer != null) return;
+        if (pending == null || game == null || !hasWindowFocus() || credits != null || photoAnswer != null) return;
         game.evaluateJavascript("Boolean(document.getElementById('go')?.offsetWidth"
                 + " && !document.getElementById('go').disabled"
                 + " && !document.querySelector('.veil.on'))", result -> {
-            if (!active() || pending == null) return;
+            if (!active() || !hasWindowFocus() || pending == null) return;
             if ("true".equals(result)) usePending();
             else if (fromButton) Toast.makeText(this, "請先收工或關閉地點卡，再套用新版。", Toast.LENGTH_SHORT).show();
         });
@@ -239,6 +268,7 @@ public final class WebWalkActivity extends Activity {
         disposeGame();
         OfflineWebCache.Snapshot old = displayed;
         displayed = pending;
+        upgradeOnline = false;
         pending = null;
         if (old != null) old.close();
         loadGame();
@@ -309,6 +339,9 @@ public final class WebWalkActivity extends Activity {
     private void loadGame() {
         clearPanel();
         pageFailed = false;
+        mobileReady = false;
+        bridge = new WalkMobileBridge(this);
+        pageSnapshot = upgradeOnline ? null : displayed;
         if (game == null) {
             game = new WebView(this);
             game.setBackgroundColor(BRICK);
@@ -320,10 +353,10 @@ public final class WebWalkActivity extends Activity {
             settings.setAllowContentAccess(false);
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
             settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-            game.setWebViewClient(new Navigation(displayed));
             game.setWebChromeClient(new Permissions());
             frame.addView(game, 0);
         }
+        game.setWebViewClient(new Navigation(pageSnapshot));
         game.setVisibility(View.VISIBLE);
         game.loadUrl(WebRelease.SITE);
     }
@@ -357,6 +390,7 @@ public final class WebWalkActivity extends Activity {
 
     @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(code, permissions, results);
+        mobileNavigation.onRequestPermissionsResult(code);
         if (code == LOCATION_REQUEST) finishPermission(has(Manifest.permission.ACCESS_FINE_LOCATION));
     }
 
@@ -364,6 +398,88 @@ public final class WebWalkActivity extends Activity {
         Consumer<Boolean> answer = permissionAnswer;
         permissionAnswer = null;
         if (answer != null) answer.accept(granted);
+    }
+
+    WalkMobileJournal walkJournal() { return mobileJournal; }
+
+    void journalScript(String script, ValueCallback<String> reply) {
+        if (game != null && mobileReady && !pageFailed) game.evaluateJavascript(script, reply);
+        else if (reply != null) reply.onReceiveValue("null");
+    }
+
+    void emitWalk(JSONObject event) {
+        journalScript("window.dispatchEvent(new CustomEvent('lukangNative',{detail:" + event + "}))", null);
+    }
+
+    JSONObject recordWalkArrival(int placeID) {
+        try { return bridge.arrival(placeID); }
+        catch (IOException | JSONException failed) { storeError(); return null; }
+    }
+
+    private void storeError() {
+        JSONObject event = new JSONObject();
+        try { event.put("type", "storeError"); } catch (JSONException impossible) { return; }
+        emitWalk(event);
+    }
+
+    @Override public void onBackPressed() { backFromGame(); }
+
+    private void backFromGame() {
+        if (game == null || !mobileReady || pageFailed) { super.onBackPressed(); return; }
+        WebView current = game;
+        game.evaluateJavascript("(()=>{const panel=document.getElementById('sharePanel');"
+                + "if(panel?.classList.contains('on')){panel.click();return true;}"
+                + "if(document.getElementById('menuView')?.hidden===false){"
+                + "document.querySelector('#tabs [data-view=walkView]').click();return true;}return false;})()", handled -> {
+            if (current == game && active() && !"true".equals(handled)) super.onBackPressed();
+        });
+    }
+
+    private void receiveMobile(String action, JSONObject message) {
+        if ("ready".equals(action)) {
+            mobileReady = true;
+            mobileJournal.pageReady();
+            mobileNavigation.handle(action, message);
+            return;
+        }
+        if (mobileNavigation.handle(action, message) || mobileJournal.handle(action, message)
+                || mobileActions.handle(action, message)) return;
+        switch (action) {
+            case "store":
+                try { bridge.save(message.optJSONObject("values")); }
+                catch (IOException | JSONException failed) { storeError(); }
+                break;
+            case "arrived":
+                if (game != null) game.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+                break;
+            case "credits": showCredits(Uri.parse(WebRelease.SITE + "credits.html"), pageSnapshot); break;
+        }
+    }
+
+    private synchronized WebRelease seed() throws IOException {
+        if (seededRelease == null) try (InputStream in = getAssets().open("offline-seed.tsv")) {
+            seededRelease = WebRelease.fromSeed(in);
+        }
+        return seededRelease;
+    }
+
+    private WebResourceResponse resource(OfflineWebCache.Snapshot snapshot, String path, String range) throws IOException {
+        if (snapshot != null) return snapshot.response(path, range);
+        byte[] data = seed().onlineFile(path);
+        return new WebResourceResponse(OfflineWebCache.mime(path), null, new ByteArrayInputStream(data));
+    }
+
+    void walkSprite(String animation, Consumer<Bitmap> ready) {
+        if (!animation.matches("idle|walk|point|pointup|pull|care|cheer|bye")) { ready.accept(null); return; }
+        OfflineWebCache.Snapshot snapshot = pageSnapshot;
+        spriteWorker.execute(() -> {
+            Bitmap image = null;
+            try (InputStream in = resource(snapshot, "sprites/" + animation + ".webp", null).getData()) {
+                image = BitmapFactory.decodeStream(in);
+            } catch (IOException | RuntimeException unavailable) { /* 保留回程箭頭。 */ }
+            final Bitmap bitmap = image;
+            main.post(() -> { if (active()) ready.accept(bitmap); });
+        });
     }
 
     private final class Permissions extends WebChromeClient {
@@ -381,6 +497,25 @@ public final class WebWalkActivity extends Activity {
         }
 
         @Override public boolean onJsPrompt(WebView view, String url, String message, String value, JsPromptResult result) {
+            if (view == game && isGame(url) && bridge.accepts(message)) {
+                try {
+                    JSONObject data = new JSONObject(value);
+                    String action = data.getString("action");
+                    if ("bootstrap".equals(action)) {
+                        result.confirm(bridge.bootstrap(data.optJSONObject("legacy"), mobileNavigation.preferences()).toString());
+                    } else {
+                        WalkMobileBridge current = bridge;
+                        result.confirm("");
+                        main.post(() -> {
+                            if (active() && game == view && current == bridge) receiveMobile(action, data);
+                        });
+                    }
+                } catch (IOException | JSONException invalid) {
+                    result.cancel();
+                    main.post(WebWalkActivity.this::storeError);
+                }
+                return true;
+            }
             if (view != game || !isGame(url) || !isGame(view.getUrl()) || !photoExport.accepts(view, message))
                 return super.onJsPrompt(view, url, message, value, result);
             result.confirm(photoExport.prepare(value) ? "ok" : "");
@@ -430,6 +565,7 @@ public final class WebWalkActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (mobileJournal != null && mobileJournal.onActivityResult(request, result, data)) return;
         if (request == WalkPhotoExport.REQUEST) { photoExport.result(result, data); return; }
         if (request != photoRequest || request < 100) return;
         if (photoAnswer == null) {
@@ -509,14 +645,18 @@ public final class WebWalkActivity extends Activity {
             if (relative == null || (!relative.isEmpty() && !OfflineWebCache.safePath(relative)))
                 return new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found",
                         Collections.emptyMap(), new ByteArrayInputStream(new byte[0]));
-            if (snapshot == null || !"GET".equals(request.getMethod()))
-                return super.shouldInterceptRequest(view, request);
+            if (!"GET".equals(request.getMethod()))
+                return new WebResourceResponse("text/plain", "UTF-8", 405, "Method Not Allowed",
+                        Collections.emptyMap(), new ByteArrayInputStream(new byte[0]));
             String range = null;
             for (Map.Entry<String,String> header : request.getRequestHeaders().entrySet()) {
                 if ("Range".equalsIgnoreCase(header.getKey())) range = header.getValue();
             }
             try {
-                return snapshot.response(relative.isEmpty() ? "index.html" : relative, range);
+                String name = relative.isEmpty() ? "index.html" : relative;
+                WebResourceResponse reply = resource(snapshot, name, range);
+                if (request.isForMainFrame() && name.equals("index.html") && view == game) return bridge.page(reply);
+                return reply;
             } catch (IOException unavailable) {
                 return new WebResourceResponse("text/plain", "UTF-8", 503, "Unavailable",
                         Collections.emptyMap(), new ByteArrayInputStream(new byte[0]));
@@ -543,6 +683,7 @@ public final class WebWalkActivity extends Activity {
         }
         @Override public void onPageFinished(WebView view, String url) {
             if (view != game || pageFailed || !isGame(url)) return;
+            if (bridge.isInstalled()) return;
             photoExport.install(view);
             if (locationAsked || has(Manifest.permission.ACCESS_COARSE_LOCATION)) return;
             // 保留第一次出發的點擊，讓定位逾時從玩家回答系統權限後才開始計算。
@@ -602,6 +743,13 @@ public final class WebWalkActivity extends Activity {
         pageFailed = true;
         if (game != null) game.setVisibility(View.GONE);
         if (pending != null) { usePending(); return; }
+        if (upgradeOnline && displayed != null) {
+            upgradeOnline = false;
+            disposeGame();
+            loadGame();
+            banner("新版本尚未下載完成，目前使用已儲存的散步畫面。", false);
+            return;
+        }
         if (displayed == null) {
             showMessage("暫時無法載入散步吧，離線內容也尚未就緒。", "重新連線", () -> {
                 loadGame();
@@ -643,6 +791,7 @@ public final class WebWalkActivity extends Activity {
     @Override protected void onStart() {
         super.onStart();
         foreground = true;
+        mobileNavigation.onResume();
         boolean wasOnline = online;
         online = connected();
         if (network != null && !networkRegistered) {
@@ -656,6 +805,7 @@ public final class WebWalkActivity extends Activity {
     }
     @Override protected void onStop() {
         foreground = false;
+        mobileNavigation.onPause();
         if (networkRegistered) {
             network.unregisterNetworkCallback(networkChanges); networkRegistered = false;
         }
@@ -688,6 +838,7 @@ public final class WebWalkActivity extends Activity {
     }
 
     private void disposeGame() {
+        mobileReady = false;
         detachPhotoPage();
         photoExport.forgetPage();
         if (credits != null) credits.dismiss();
@@ -702,6 +853,10 @@ public final class WebWalkActivity extends Activity {
         finishPermission(false);
         cache.cancel();
         worker.shutdownNow();
+        spriteWorker.shutdownNow();
+        mobileNavigation.close();
+        mobileJournal.close();
+        mobileActions.close();
         main.removeCallbacks(hideNotice);
         disposeGame();
         photoExport.close(isFinishing());

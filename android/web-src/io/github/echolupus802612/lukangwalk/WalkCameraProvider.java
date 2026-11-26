@@ -52,14 +52,15 @@ public final class WalkCameraProvider extends ContentProvider {
     private File photo(Uri uri) {
         String name = uri.getLastPathSegment();
         if (!AUTHORITY.equals(uri.getAuthority()) || uri.getPathSegments().size() != 1
-                || name == null || !NAME.matcher(name).matches()) throw new IllegalArgumentException("找不到這張照片");
+                || name == null || restore(getContext(), name) == null) throw new IllegalArgumentException("找不到這張照片");
         return new File(directory(getContext()), name);
     }
 
     @Override public boolean onCreate() { return true; }
-    @Override public String getType(Uri uri) { photo(uri); return "image/jpeg"; }
+    @Override public String getType(Uri uri) { return photo(uri).getName().endsWith(".png") ? "image/png" : "image/jpeg"; }
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
         File file = photo(uri);
+        if (file.getName().endsWith(".png") && !"r".equals(mode)) throw new FileNotFoundException("透卡僅供讀取");
         if (!file.isFile()) throw new FileNotFoundException("找不到這張照片");
         // 僅開啟已經建立的暫存檔；拍攝作業結束之後不能再建立相同檔案。
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.parseMode(mode) & ~ParcelFileDescriptor.MODE_CREATE);
