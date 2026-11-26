@@ -352,14 +352,13 @@ private final class WalkPhotoDetail: UIViewController {
     }
 }
 
-/// 透卡附帶的貼文文字：地點、話題與網頁版網址，依分享對象調整。
+/// 透卡附帶的貼文文字：地點加上話題 #散步吧。
 /// 圖片一定附上；Instagram 的分享不收文字，改成先複製，讓使用者貼到說明欄。
 final class WalkShareCaption: NSObject, UIActivityItemSource {
-    static let link = "https://echolupus802612.github.io/lukang-walk/"
     private let text: String
 
     init(place: String) {
-        text = "今天散步到了\(place)。#散步吧\n\(Self.link)"
+        text = "今天散步到了\(place) #散步吧"
     }
 
     static func isInstagram(_ type: UIActivity.ActivityType) -> Bool {
