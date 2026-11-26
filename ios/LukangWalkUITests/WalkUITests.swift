@@ -433,8 +433,9 @@ final class WalkUITests: XCTestCase {
         let confirm = app.alerts.buttons["結束散步並回程"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
-        let status = app.staticTexts["walkReturnStatus"]
-        let distance = app.staticTexts["walkReturnDistance"]
+        XCTAssertTrue(app.navigationBars["帶我回去"].waitForExistence(timeout: 10), "選擇結束散步後應開啟回程導航")
+        let status = app.descendants(matching: .any).matching(identifier: "walkReturnStatus").firstMatch
+        let distance = app.descendants(matching: .any).matching(identifier: "walkReturnDistance").firstMatch
         XCTAssertTrue(distance.waitForExistence(timeout: 10))
         XCTAssertEqual(distance.label, "距離已隱藏")
         setLocation(start)
