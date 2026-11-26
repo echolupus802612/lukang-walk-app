@@ -5,6 +5,40 @@
 - 線上試玩：https://echolupus802612.github.io/lukang-walk/ （需允許定位與動作感測；附近 5 公里內沒有收錄的地點時，自動在鹿港天后宮前進入模擬模式）
 - 模擬模式：網址加 `#sim`，按住「▲ 往目的地走」前進
 
+## Android App
+
+Android 1.5 支援 Android 8.0 以上版本。首次開啟時請連上 Wi-Fi，App 會下載正式網站的全台地點、照片、角色圖、字型與語音。目前完整內容包約 123 MB。下載期間可以選「先連線散步」，也可以等候下載完成。畫面顯示「可離線遊玩」後，即使關閉網路並重新開啟 App，也能實地或模擬散步。地點照片以 240 像素寬儲存在手機。
+
+目前內容共有 4,962 張地點照片。Android 15 模擬器上的下載結果為 38.8 MB 的內容，包含檔案系統配置空間後，離線資料夾實際占用約 70 MB。不同手機的占用空間可能略有差異。
+
+連網開啟 App 或恢復連線時，App 會檢查已發布的網站版本，只下載有變動的內容。新版本準備完成前會保留上一份可玩的版本。散步途中有更新時，可以收工後再套用，也可以下次開啟時使用新版。
+
+請直接覆蓋安裝以保留足跡。從 1.1 或 1.4 升級會沿用網頁足跡。從 1.2 或 1.3 升級則會在手機上把實走與模擬足跡、最近到訪地點及語音偏好匯入網頁儲存空間。
+
+建置需要 Python、JDK 17、Android SDK Platform 35 與 Build Tools 35.0.0。設定 `JAVA_HOME` 與 `ANDROID_HOME`，再執行 `python -X utf8 -B tools/build_android.py`。安裝檔位於 `android/build/Walk-1.5-web.apk`。APK 內有一份已發布版本的檔案清單。首次安裝若遇到版本查詢服務暫時無法使用，App 可依這份清單連網下載並核對內容。
+
+### 舊版 Android 1.3 離線建置
+
+Android 1.3 支援 Android 8.0 以上版本。APK 內建全台 5,212 個地點及目前收錄的 4,962 張地點照片。照片統一縮為 240 × 150 像素，可在離線時顯示。選點、定位、方向提示、角色動畫與抵達判定都在手機上執行，配音、字型及授權頁也隨 App 提供。從 1.2 覆蓋升級會沿用手機上的足跡與語音設定；從 1.1 升級會匯入舊 App 的紀錄。
+
+第一次按「出門散步吧」時，選擇「使用應用程式時」與「精確位置」即可實地散步。略過定位也能選擇「模擬散步」。之後可在手機的「設定 → 應用程式 → 散步吧 → 權限」調整位置權限。實走與模擬足跡分開保存在這支手機的 App 內，清除 App 資料或解除安裝會清除足跡。
+
+本機的 `android/` 目錄已從公開版本庫的提交範圍排除。從原始碼建置需要此目錄、JDK 17、Android SDK Platform 35、Build Tools 35.0.0，以及 Python 的字型和影像工具。本版使用 Python 3.11、fontTools 4.59.2、Brotli 1.1.0、Pillow 11.3.0 與其 WebP 1.5.0 編碼器。APK 和後續發布的照片檔使用相同設定（Lanczos 縮圖、WebP 品質 48）。設定 `JAVA_HOME`、`ANDROID_HOME` 後，在專案根目錄執行：
+
+```sh
+python -X utf8 -B tools/build_android.py --variant native
+```
+
+簽署後的安裝檔位於 `android/build/Walk-1.3-native.apk`。正式建置使用 R8 縮減與混淆程式碼，當機分析所需的對照表放在 `android/build/mappings/`。首次建置會將專用簽署金鑰及密碼存入使用者家目錄的 `.android/lukangwalk-signing/`。請私下備份整個資料夾，後續發行使用同一把金鑰，玩家才能直接更新並保留足跡。
+
+**更新地點、照片及語音**。APK 隨附第 2 版內容。準備發布下一版時，先依現有流程更新素材及授權頁，再執行以下命令產生資料檔。每次發布請提高 `--revision`。
+
+```sh
+python -B tools/android_content.py --revision 3 --output android/build/content-site
+```
+
+將產生的 `content-site/android-content/` 整個子目錄發布至既有網站的 `/lukang-walk/android-content/`，最後發布該目錄下的 `android-content.json`。這個目錄供 1.3 離線版下載。玩家在首頁按「更新地點資料」即可下載變更的檔案，所有內容通過雜湊校驗後，下次開啟 App 套用。更新時不會傳送足跡或目前位置。
+
 ## iPhone App
 
 在 Mac 用裝有 iOS 17 或更新 SDK 的 Xcode 開啟 `ios/LukangWalk.xcodeproj`，選擇 **LukangWalk** 方案和一台 iPhone 模擬器，按 **⌘R**。專案已附字型、地點、照片、語音與授權頁。從原始碼建置 App 可直接使用這些檔案。

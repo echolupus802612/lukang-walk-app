@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="io.github.echolupus802612.lukangwalk"
+    android:versionCode="6" android:versionName="1.5">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-feature android:name="android.hardware.location" android:required="false"/>
+    <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
+    <uses-feature android:name="android.hardware.location.network" android:required="false"/>
+    <application android:allowBackup="false" android:usesCleartextTraffic="false"
+        android:icon="@mipmap/walk" android:label="散步吧"
+        android:theme="@style/WalkTheme">
+        <activity android:name=".WebWalkActivity" android:exported="true"
+            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

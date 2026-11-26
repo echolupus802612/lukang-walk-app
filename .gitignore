@@ -16,6 +16,8 @@ xcuserdata/
 DerivedData/
 *.xcresult/
 ios/build/
+# Android 原生實作僅保存在本機，避免隨公開網站一併提交。
+/android/
 art/desc/codex_run.txt
 data/desc_tw_parts/
 art/photos/raw_tw/
