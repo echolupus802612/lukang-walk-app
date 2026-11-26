@@ -358,7 +358,7 @@ final class WalkShareCaption: NSObject, UIActivityItemSource {
     private let text: String
 
     init(place: String) {
-        text = "今天散步到了\(place) #散步吧"
+        text = "跟著小嚮導走到了\(place)！#散步吧"
     }
 
     static func isInstagram(_ type: UIActivity.ActivityType) -> Bool {
