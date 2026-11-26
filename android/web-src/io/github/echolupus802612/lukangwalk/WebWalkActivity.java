@@ -466,7 +466,8 @@ public final class WebWalkActivity extends Activity {
     private WebResourceResponse resource(OfflineWebCache.Snapshot snapshot, String path, String range) throws IOException {
         if (snapshot != null) return snapshot.response(path, range);
         byte[] data = seed().onlineFile(path);
-        return new WebResourceResponse(OfflineWebCache.mime(path), null, new ByteArrayInputStream(data));
+        return new WebResourceResponse(OfflineWebCache.mime(path), path.endsWith(".html") ? "UTF-8" : null,
+                200, "OK", Collections.singletonMap("Cache-Control", "no-store"), new ByteArrayInputStream(data));
     }
 
     void walkSprite(String animation, Consumer<Bitmap> ready) {
