@@ -3,7 +3,7 @@ import UIKit
 /// 跟網頁地點卡一樣的彈窗：底下壓暗，中間浮一張米白圓角卡片，往上浮起出現。
 /// 取代 iOS 內建從下往上滑的面板。
 @MainActor
-final class WalkPopupController: UIViewController, UINavigationControllerDelegate {
+final class WalkPopupController: UIViewController, UINavigationControllerDelegate, UIGestureRecognizerDelegate {
     let content: UIViewController
     private let frame = UIView()
     private let card = UIView()
@@ -63,15 +63,23 @@ final class WalkPopupController: UIViewController, UINavigationControllerDelegat
 
     func navigationController(_ navigationController: UINavigationController, willShow viewController: UIViewController,
                               animated: Bool) {
-        // 返回鍵由前一頁的 backBarButtonItem 決定；先替整疊頁面補上，才能一併拿掉玻璃圓鈕。
-        for screen in navigationController.viewControllers + [viewController] {
-            let item = screen.navigationItem
-            if item.backBarButtonItem == nil {
-                item.backBarButtonItem = UIBarButtonItem(title: "", style: .plain, target: nil, action: nil)
-            }
-            item.backButtonDisplayMode = .minimal
-            WalkTheme.flatten(item)
+        // iOS 26 的系統返回鍵一定帶玻璃圓鈕，改用自己的返回箭頭；左緣滑回上一頁的手勢照常可用。
+        if navigationController.viewControllers.first !== viewController,
+           viewController.navigationItem.leftBarButtonItem == nil {
+            let back = UIBarButtonItem(image: UIImage(systemName: "chevron.backward"),
+                                       primaryAction: UIAction { [weak navigationController] _ in
+                                           navigationController?.popViewController(animated: true)
+                                       })
+            back.accessibilityLabel = "返回"
+            viewController.navigationItem.hidesBackButton = true
+            viewController.navigationItem.leftBarButtonItem = back
         }
+        navigationController.interactivePopGestureRecognizer?.delegate = self
+        WalkTheme.flatten(viewController.navigationItem)
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        ((content as? UINavigationController)?.viewControllers.count ?? 0) > 1
     }
 
     override func accessibilityPerformEscape() -> Bool {
