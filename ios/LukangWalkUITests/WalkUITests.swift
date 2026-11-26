@@ -444,6 +444,14 @@ final class WalkUITests: XCTestCase {
                        .completed)
         distance.press(forDuration: 0.8)
         XCTAssertTrue(distance.label.contains("公尺"))
+        let initialLabel = distance.label
+        let initialDistance = try XCTUnwrap(initialLabel.split(separator: " ").compactMap { Int($0) }.first)
+        setLocation(.init(latitude: start.latitude + 0.00080, longitude: start.longitude))
+        let changed = NSPredicate(format: "label != %@ AND label ENDSWITH %@", initialLabel, "公尺")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: changed, object: distance)], timeout: 10),
+                       .completed)
+        let remaining = try XCTUnwrap(distance.label.split(separator: " ").compactMap { Int($0) }.first)
+        XCTAssertLessThan(remaining, initialDistance - 50, "沿回程方向前進約 89 公尺後，距離應縮短")
         let guide = XCTAttachment(screenshot: app.screenshot())
         guide.name = "回程方位與距離"
         guide.lifetime = .keepAlways

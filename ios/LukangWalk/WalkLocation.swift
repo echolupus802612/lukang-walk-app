@@ -60,6 +60,7 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
     func startReturn(session: Int, latitude: Double, longitude: Double) {
         let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
         guard latitude.isFinite, longitude.isFinite, CLLocationCoordinate2DIsValid(coordinate) else { return }
+        let wasUpdating = updating
         // 已授權且正在定位時沿用同一個 manager，切換目的地或行程都須重新收兩筆。
         if self.session != session {
             self.session = session
@@ -68,6 +69,16 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
         }
         select(.returnPoint, coordinate: coordinate)
         connectIfNeeded()
+        guard foreground, updating, let manager else { return }
+        // 人還站在原地時，系統可能不再送相同位置。這一筆只給新畫面顯示方位。
+        if let fix = manager.location, (0...15).contains(Date().timeIntervalSince(fix.timestamp)),
+           (0...40).contains(fix.horizontalAccuracy), CLLocationCoordinate2DIsValid(fix.coordinate) {
+            emitPosition(fix)
+        } else if wasUpdating {
+            // 重新啟動現有定位服務，讓系統提供這一程的第一筆定位。
+            manager.stopUpdatingLocation()
+            manager.startUpdatingLocation()
+        }
     }
 
     private func select(_ destination: Destination, coordinate: CLLocationCoordinate2D) {
@@ -155,6 +166,12 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
         onEvent?(event)
     }
 
+    private func emitPosition(_ fix: CLLocation) {
+        let coords = ["latitude": fix.coordinate.latitude, "longitude": fix.coordinate.longitude,
+                      "accuracy": fix.horizontalAccuracy, "speed": fix.speed]
+        emit(["type": "position", "coords": coords, "timestamp": fix.timestamp.timeIntervalSince1970 * 1000])
+    }
+
     private func fail(_ reason: String) {
         guard let session else { return }
         end()
@@ -213,11 +230,7 @@ final class WalkLocation: NSObject, CLLocationManagerDelegate {
                 return
             }
             guard foreground && age <= 2 else { continue }
-            let coords: [String: Any] = [
-                "latitude": fix.coordinate.latitude, "longitude": fix.coordinate.longitude,
-                "accuracy": fix.horizontalAccuracy, "speed": fix.speed
-            ]
-            emit(["type": "position", "coords": coords, "timestamp": fix.timestamp.timeIntervalSince1970 * 1000])
+            emitPosition(fix)
         }
     }
 
