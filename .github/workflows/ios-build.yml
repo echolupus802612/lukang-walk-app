@@ -5,12 +5,19 @@ on:
     branches: [main]
     paths: ['ios/**', 'src/**', 'docs/**', 'data/**', 'tools/build_page.py', 'tools/build_ios_credits.py', 'tools/test_walk_place_report.swift', '.github/workflows/ios-build.yml']
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 完整測試，或只編譯打包（跳過模擬器與 UI 測試）
+        type: choice
+        options: [full, package]
+        default: full
 
 permissions:
   contents: read
 
 concurrency:
-  group: lukang-walk-app-ios
+  # 只編譯打包另成一組，不會取消正在跑的完整測試。
+  group: lukang-walk-app-ios-${{ inputs.mode == 'package' && 'package' || 'full' }}
   cancel-in-progress: true
 
 jobs:
@@ -50,6 +57,7 @@ jobs:
           "$RUNNER_TEMP/test-walk-place-report"
 
       - name: Select an available iPhone
+        if: ${{ inputs.mode != 'package' }}
         run: |
           xcodebuild -version
           sdk="$(xcrun --sdk iphonesimulator --show-sdk-version)"
@@ -80,6 +88,7 @@ jobs:
 
       - name: Build for the iPhone simulator
         id: build_sim
+        if: ${{ inputs.mode != 'package' }}
         run: |
           settings=(
             -project "$PROJECT" -scheme "$SCHEME" -configuration Debug
@@ -90,6 +99,7 @@ jobs:
             -resultBundlePath "$RUNNER_TEMP/LukangWalk-Build.xcresult"
 
       - name: Package simulator app and capture the ready screen
+        if: ${{ inputs.mode != 'package' }}
         run: |
           app="$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/LukangWalk.app"
           ditto -c -k --keepParent "$app" "$RUNNER_TEMP/LukangWalk-Simulator.zip"
@@ -102,6 +112,7 @@ jobs:
           xcrun simctl io "$SIMULATOR_ID" screenshot "$RUNNER_TEMP/LukangWalk-iPhone-preview.png"
 
       - name: Upload simulator app
+        if: ${{ inputs.mode != 'package' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: LukangWalk-Simulator
@@ -110,6 +121,7 @@ jobs:
           compression-level: 0
 
       - name: Upload simulator preview
+        if: ${{ inputs.mode != 'package' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: LukangWalk-iPhone-preview
@@ -136,6 +148,7 @@ jobs:
 
       - name: Run iPhone UI tests
         id: test
+        if: ${{ inputs.mode != 'package' }}
         run: |
           settings=(
             -project "$PROJECT" -scheme "$SCHEME" -configuration Debug
