@@ -150,20 +150,20 @@ final class WalkUITests: XCTestCase {
 
     @MainActor
     private func selectPhotoFromSystemLibrary(_ app: XCUIApplication) {
-        let photos = app.descendants(matching: .any).matching(NSPredicate(
-            format: "label BEGINSWITH[c] %@ OR label BEGINSWITH %@ OR label BEGINSWITH %@",
-            "Photo,", "照片，", "相片，"
-        ))
-        let pickerCell = app.collectionViews.cells.firstMatch
-        let pickerImage = app.scrollViews.images.firstMatch
-        let photo = photos.firstMatch
-        if photo.waitForExistence(timeout: 5) {
-            photo.tap()
-        } else if pickerCell.exists {
-            pickerCell.tap()
+        let grid = app.otherElements["PXGGridLayout-Group"].firstMatch
+        XCTAssertTrue(grid.waitForExistence(timeout: 10), app.debugDescription)
+        let frame = grid.frame
+        // iPhone 16 的系統選擇器每列三張，剛加入的測試圖在左上角。
+        let center = CGPoint(x: frame.minX + frame.width / 6, y: frame.minY + frame.width / 6)
+        let tile = grid.descendants(matching: .any).allElementsBoundByIndex.first {
+            $0.frame.contains(center) && $0.frame.width < frame.width / 2 && $0.isHittable
+        }
+        if let tile {
+            tile.tap()
         } else {
-            XCTAssertTrue(pickerImage.waitForExistence(timeout: 5), app.debugDescription)
-            pickerImage.tap()
+            // 有些系統版本只公開整個格狀檢視的合併標籤，改以真實格子的中心點操作。
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            origin.withOffset(CGVector(dx: center.x - app.frame.minX, dy: center.y - app.frame.minY)).tap()
         }
         let add = app.buttons.matching(NSPredicate(format: "label IN %@", ["Add", "加入", "新增"])).firstMatch
         if add.waitForExistence(timeout: 2) { add.tap() }
