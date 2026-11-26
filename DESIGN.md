@@ -1,6 +1,6 @@
 # 散步吧 設計規範
 
-版本：2026-11-25（改名「散步吧」、擴大到全台），涵蓋網頁與 iPhone App（`src/app.html`、`ios/`、`tools/*.py`、`data/*.json`）。
+本文件保留原有散步體驗與平台差異的設計紀錄。2026-11-26 起，此儲存庫負責 iPhone 與 Android；`src/`、`docs/` 與 `data/` 均為 App 自己的版本。Android 1.6 的內容發布見 [發布說明](RELEASE.md)。
 文中數值都是**現行實作**；標「待驗證」的是還沒實地走過確認的地方。改程式時請一併更新這份文件。
 
 ---
@@ -402,7 +402,7 @@ iPhone 工程在 `ios/LukangWalk.xcodeproj`，部署目標為 iOS 17.0 起，直
 | 角色動作 | `art/prompts/` → 生圖 → `art/gen/` | `build_sprites.py` |
 
 - `docs/index.html` 是產生出來的檔案，不要直接改。
-- GitHub Pages 從 `docs/` 發布，push 到 main 就會部署。
+- iPhone 建置隨附本庫的 `docs/`。Android 1.6 的畫面與素材依 [發布說明](RELEASE.md) 更新到 App 專用內容站。
 - **不進版控**：
   - 原始下載資料、原圖
   - 使用者提供的照片

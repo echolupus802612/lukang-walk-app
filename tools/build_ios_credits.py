@@ -126,14 +126,15 @@ def main():
     parser.add_argument("root", nargs="?", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--check", action="store_true", help="fail if the bundled page is stale")
     args = parser.parse_args()
-    output = args.root / "ios/LukangWalk/Credits/credits.html"
     document = render(args.root)
-    if args.check:
-        if not output.is_file() or output.read_text(encoding="utf-8") != document:
-            parser.exit(1, "Regenerate the offline credits with tools/build_ios_credits.py\n")
-    else:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_bytes(document.encode("utf-8"))
+    for relative in ("ios/LukangWalk/Credits/credits.html", "docs/credits.html"):
+        output = args.root / relative
+        if args.check:
+            if not output.is_file() or output.read_text(encoding="utf-8") != document:
+                parser.exit(1, f"Regenerate {relative} with tools/build_ios_credits.py\n")
+        else:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(document.encode("utf-8"))
 
 
 if __name__ == "__main__":

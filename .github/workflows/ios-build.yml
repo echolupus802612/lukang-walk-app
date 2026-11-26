@@ -2,13 +2,15 @@ name: Build and test iOS
 
 on:
   push:
-    branches: [ios/first-app]
+    branches: [main]
+    paths: ['ios/**', 'src/**', 'docs/**', 'data/**', 'tools/build_page.py', 'tools/build_ios_credits.py', '.github/workflows/ios-build.yml']
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: lukang-walk-ios-first-app
+  group: lukang-walk-app-ios
   cancel-in-progress: true
 
 jobs:

@@ -1,4 +1,4 @@
-"""把地點資料嵌進 src/app.html → docs/index.html（GitHub Pages 從 docs/ 發布；iPhone App 也直接打包 docs/）
+"""把地點資料嵌進 src/app.html → docs/index.html（App 專用；iPhone 隨附此頁，Android 由獨立內容站下載）
 
 用法：python -I -B tools/build_page.py <專案根目錄>
 地點 = data/lukang.json（鹿港一帶，人工整理）＋ data/taiwan.json（全台其他地方，build_taiwan.py 產生）。
@@ -39,5 +39,5 @@ assert "</script" not in card_js.lower()
 html = html.replace("/*SHARE_CARD*/", card_js)
 out = root / "docs" / "index.html"
 out.parent.mkdir(exist_ok=True)
-out.write_text(html.replace("/*DATA*/[]", blob), encoding="utf-8")
+out.write_bytes(html.replace("/*DATA*/[]", blob).encode("utf-8"))
 print(f"{len(slim)} 個地點（有照片 {sum(1 for x in slim if x.get('ph'))}、有簡介 {sum(1 for x in slim if x.get('desc'))}）→ {out}（{out.stat().st_size // 1024} KB）")

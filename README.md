@@ -1,21 +1,23 @@
-# 散步吧（原型）
+# 散步吧 App
 
 出門散步吧：狼耳小嚮導替你挑一個附近的地方、替你指路，到達後才揭曉是哪裡。全台約 5,200 個地點，鹿港老街一帶是人工整理的試辦地區。
 
-- 線上試玩：https://echolupus802612.github.io/lukang-walk/ （需允許定位與動作感測；附近 5 公里內沒有收錄的地點時，自動在鹿港天后宮前進入模擬模式）
+iPhone 與 Android 在此私有儲存庫維護，各自使用本庫的程式、景點與素材。Android 內容發布步驟見 [發布說明](RELEASE.md)。
+
+- Android 專用內容站：https://echolupus802612.github.io/lukang-walk-app-content/
 - 模擬模式：網址加 `#sim`，按住「▲ 往目的地走」前進
 
 ## Android App
 
-Android 1.5 支援 Android 8.0 以上版本。首次開啟時請連上 Wi-Fi，App 會下載正式網站的全台地點、照片、角色圖、字型與語音。目前完整內容包約 123 MB。下載期間可以選「先連線散步」，也可以等候下載完成。畫面顯示「可離線遊玩」後，即使關閉網路並重新開啟 App，也能實地或模擬散步。地點照片以 240 像素寬儲存在手機。
+Android 1.6 支援 Android 8.0 以上版本。首次開啟時請連上 Wi-Fi，App 會下載 App 專用內容站的全台地點、照片、角色圖、字型與語音。目前完整內容包約 123 MB。下載期間可以選「先連線散步」，也可以等候下載完成。畫面顯示「可離線遊玩」後，即使關閉網路並重新開啟 App，也能實地或模擬散步。地點照片以 240 像素寬儲存在手機。
 
-目前內容共有 4,962 張地點照片。Android 15 模擬器上的下載結果為 38.8 MB 的內容，包含檔案系統配置空間後，離線資料夾實際占用約 70 MB。不同手機的占用空間可能略有差異。
+目前內容共有 4,962 張地點照片。先前 1.5 版在 Android 15 模擬器上的下載結果為 38.8 MB 的內容，包含檔案系統配置空間後，離線資料夾實際占用約 70 MB。不同手機的占用空間可能略有差異。
 
 連網開啟 App 或恢復連線時，App 會檢查已發布的網站版本，只下載有變動的內容。新版本準備完成前會保留上一份可玩的版本。散步途中有更新時，可以收工後再套用，也可以下次開啟時使用新版。
 
-請直接覆蓋安裝以保留足跡。從 1.1 或 1.4 升級會沿用網頁足跡。從 1.2 或 1.3 升級則會在手機上把實走與模擬足跡、最近到訪地點及語音偏好匯入網頁儲存空間。
+從 Android 1.5 直接覆蓋安裝 1.6 即切換到 App 專用內容站。沿用同一套件識別碼、原簽章與同一網站來源的足跡。舊版 1.5 仍從原網站取得內容。從 1.1 或 1.4 升級會沿用網頁足跡。從 1.2 或 1.3 升級則會在手機上把實走與模擬足跡、最近到訪地點及語音偏好匯入網頁儲存空間。
 
-建置需要 Python、JDK 17、Android SDK Platform 35 與 Build Tools 35.0.0。設定 `JAVA_HOME` 與 `ANDROID_HOME`，再執行 `python -X utf8 -B tools/build_android.py`。安裝檔位於 `android/build/Walk-1.5-web.apk`。APK 內有一份已發布版本的檔案清單。首次安裝若遇到版本查詢服務暫時無法使用，App 可依這份清單連網下載並核對內容。
+建置需要 Python、JDK 17、Android SDK Platform 35 與 Build Tools 35.0.0。設定 `JAVA_HOME` 與 `ANDROID_HOME`，再執行 `python -X utf8 -B tools/build_android.py`。安裝檔位於 `android/build/Walk-1.6-web.apk`。APK 內有一份已發布版本的檔案清單。首次安裝若遇到版本查詢服務暫時無法使用，App 可依這份清單連網下載並核對內容。
 
 ### 舊版 Android 1.3 離線建置
 
@@ -23,7 +25,7 @@ Android 1.3 支援 Android 8.0 以上版本。APK 內建全台 5,212 個地點�
 
 第一次按「出門散步吧」時，選擇「使用應用程式時」與「精確位置」即可實地散步。略過定位也能選擇「模擬散步」。之後可在手機的「設定 → 應用程式 → 散步吧 → 權限」調整位置權限。實走與模擬足跡分開保存在這支手機的 App 內，清除 App 資料或解除安裝會清除足跡。
 
-本機的 `android/` 目錄已從公開版本庫的提交範圍排除。從原始碼建置需要此目錄、JDK 17、Android SDK Platform 35、Build Tools 35.0.0，以及 Python 的字型和影像工具。本版使用 Python 3.11、fontTools 4.59.2、Brotli 1.1.0、Pillow 11.3.0 與其 WebP 1.5.0 編碼器。APK 和後續發布的照片檔使用相同設定（Lanczos 縮圖、WebP 品質 48）。設定 `JAVA_HOME`、`ANDROID_HOME` 後，在專案根目錄執行：
+Android 原始碼、兩套版本的建置設定及下載清單皆在本儲存庫。從原始碼建置需要此目錄、JDK 17、Android SDK Platform 35、Build Tools 35.0.0，以及 Python 的字型和影像工具。本版使用 Python 3.11、fontTools 4.59.2、Brotli 1.1.0、Pillow 11.3.0 與其 WebP 1.5.0 編碼器。APK 和後續發布的照片檔使用相同設定（Lanczos 縮圖、WebP 品質 48）。設定 `JAVA_HOME`、`ANDROID_HOME` 後，在專案根目錄執行：
 
 ```sh
 python -X utf8 -B tools/build_android.py --variant native
@@ -74,7 +76,7 @@ xcodebuild -project ios/LukangWalk.xcodeproj -scheme LukangWalk \
 | `data/place_overrides.json` | 人工整理：地點簡介（附出處）、移出的地點；`build_data.py` 重跑時套用。草稿與審閱見 `data/desc_draft.md` |
 | `data/place_ids.json` | 鹿港地點永久編號登記（只增不刪）；足跡認這個號碼，重跑資料不會換號 |
 | `tools/build_photos.py` | 抓地點照片（人工指定的創用 CC 照片優先，其次文資局代表圖、觀光署景點圖），裁成 16:10 → `docs/photos/<id>.webp`；每張出處記在 `data/photos.json` |
-| `tools/build_page.py` | 把資料嵌入頁面 → `docs/index.html`（GitHub Pages 從 `docs/` 發布） |
+| `tools/build_page.py` | 把資料嵌入頁面 → `docs/index.html`（iPhone 隨附此頁，Android 由專用內容站下載） |
 | `art/prompts/` | 角色動作的生圖提示詞（Codex image_gen） |
 | `tools/build_sprites.py` | 把 `art/gen/` 的 2×2 動作表切成橫排精靈圖 → `docs/sprites/*.webp`（原圖不進版控） |
 | `tools/voice_jobs.py` | 產生配音任務清單 `art/voice/jobs.json`（台詞、表演指令） |

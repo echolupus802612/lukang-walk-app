@@ -41,10 +41,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
-/** 保留正式網站的 HTTPS 來源與足跡，讓每一次散步使用同一版下載好的網站。 */
+/** 以原有 HTTPS 來源讀取手機足跡，從 App 專屬目錄載入每趟散步的內容。 */
 public final class WebWalkActivity extends Activity {
-    private static final String HOST = "echolupus802612.github.io";
-    private static final String ENTRY = "https://" + HOST + "/lukang-walk/";
     private static final String LOCATION_NOTICE = "散步吧：出發前確認定位權限";
     private static final int LOCATION_REQUEST = 1;
     private static final int BRICK = Color.rgb(130, 48, 31);
@@ -185,7 +183,7 @@ public final class WebWalkActivity extends Activity {
             downloadBar.setIndeterminate(false);
             downloadBar.setProgress(percent);
         } else if (game != null && complete < total) {
-            banner((displayed == null ? "正在下載離線內容　" : "正在下載網站更新　") + percent + "%", false);
+            banner((displayed == null ? "正在下載離線內容　" : "正在下載內容更新　") + percent + "%", false);
         }
     }
 
@@ -204,7 +202,7 @@ public final class WebWalkActivity extends Activity {
             if (pending != null) pending.close();
             pending = saved;
             if (pageFailed) { usePending(); return; }
-            banner(displayed == null ? "離線內容已下載，這趟結束後即可套用" : "網站更新已下載", true);
+            banner(displayed == null ? "離線內容已下載，這趟結束後即可套用" : "散步內容更新已下載", true);
             offerApply(false);
         }
     }
@@ -311,11 +309,11 @@ public final class WebWalkActivity extends Activity {
             frame.addView(game, 0);
         }
         game.setVisibility(View.VISIBLE);
-        game.loadUrl(ENTRY);
+        game.loadUrl(WebRelease.SITE);
     }
 
     private static boolean isSite(Uri uri) {
-        return uri != null && "https".equals(uri.getScheme()) && HOST.equals(uri.getHost())
+        return uri != null && "https".equals(uri.getScheme()) && WebRelease.HOST.equals(uri.getHost())
                 && uri.getUserInfo() == null && (uri.getPort() == -1 || uri.getPort() == 443);
     }
 
@@ -323,7 +321,7 @@ public final class WebWalkActivity extends Activity {
         if (url == null) return false;
         Uri uri = Uri.parse(url);
         String path = uri.getEncodedPath();
-        return isSite(uri) && ("/lukang-walk/".equals(path) || "/lukang-walk/index.html".equals(path));
+        return isSite(uri) && (WebRelease.BASE_PATH.equals(path) || (WebRelease.BASE_PATH + "index.html").equals(path));
     }
 
     private boolean has(String permission) {
@@ -376,11 +374,16 @@ public final class WebWalkActivity extends Activity {
 
         @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
             Uri uri = request.getUrl();
-            if (snapshot == null || !isSite(uri) || !"GET".equals(request.getMethod()))
+            if (!isSite(uri))
                 return super.shouldInterceptRequest(view, request);
-            String path = uri.getPath(), base = "/lukang-walk/";
-            if (path == null || !path.startsWith(base)) return super.shouldInterceptRequest(view, request);
-            String relative = path.substring(base.length());
+            String path = uri.getPath();
+            String relative = path != null && path.startsWith(WebRelease.BASE_PATH)
+                    ? path.substring(WebRelease.BASE_PATH.length()) : null;
+            if (relative == null || (!relative.isEmpty() && !OfflineWebCache.safePath(relative)))
+                return new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found",
+                        Collections.emptyMap(), new ByteArrayInputStream(new byte[0]));
+            if (snapshot == null || !"GET".equals(request.getMethod()))
+                return super.shouldInterceptRequest(view, request);
             String range = null;
             for (Map.Entry<String,String> header : request.getRequestHeaders().entrySet()) {
                 if ("Range".equalsIgnoreCase(header.getKey())) range = header.getValue();

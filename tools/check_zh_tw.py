@@ -93,12 +93,7 @@ def project_files():
         result = subprocess.check_output(
             ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=ROOT
         )
-        files = {ROOT / name for name in result.decode("utf-8").split("\0") if name}
-        # 原生 Android 程式刻意排除在公開版本庫之外，仍需檢查隨 App 提供的文字。
-        files.update((ROOT / "android").glob("*AndroidManifest.xml"))
-        for directory in ("android/web-src", "android/src", "android/res"):
-            files.update((ROOT / directory).rglob("*"))
-        return sorted(files)
+        return sorted(ROOT / name for name in result.decode("utf-8").split("\0") if name)
     # 解壓縮的原始碼也能離線檢查。
     return (path for path in ROOT.rglob("*") if "build" not in path.relative_to(ROOT).parts)
 

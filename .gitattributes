@@ -1,0 +1,5 @@
+/docs/*.html text eol=lf
+/docs/fonts/*.txt text eol=lf
+/android/web-assets/offline-seed.tsv text eol=lf
+# The generated credits embed the distributed OFL text verbatim.
+/docs/credits.html whitespace=-blank-at-eol

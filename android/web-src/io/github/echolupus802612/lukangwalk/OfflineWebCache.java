@@ -174,7 +174,7 @@ final class OfflineWebCache {
         }
     }
 
-    private static boolean safePath(String path) {
+    static boolean safePath(String path) {
         if (path == null || path.isEmpty() || path.length() > 512 || path.startsWith("/") || path.endsWith("/")
                 || path.indexOf('\\') >= 0 || path.indexOf('%') >= 0 || path.indexOf('?') >= 0
                 || path.indexOf('#') >= 0 || path.indexOf(':') >= 0 || path.indexOf('\0') >= 0) return false;
@@ -429,7 +429,7 @@ final class OfflineWebCache {
         }
         void archive(WebRelease release) throws IOException {
             HttpsURLConnection c=op.connect(release.archiveUrl());
-            String prefix="lukang-walk-"+release.commit+"/docs/";
+            String prefix = WebRelease.CONTENT_NAME + "-" + release.commit + "/docs/";
             try {
                 if (c.getResponseCode()!=200 || c.getContentLengthLong()>MAX_ARCHIVE) throw new IOException("無法讀取封存檔");
                 try (ZipInputStream zip=new ZipInputStream(new BufferedInputStream(c.getInputStream(),65536))) {

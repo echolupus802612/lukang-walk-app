@@ -24,9 +24,13 @@ import java.util.regex.Pattern;
 
 /** 在背景執行緒核對已部署的網頁版本與完整檔案清單。 */
 final class WebRelease {
-    private static final String REPO = "echolupus802612/lukang-walk";
+    static final String CONTENT_NAME = "lukang-walk-app-content";
+    static final String HOST = "echolupus802612.github.io";
+    static final String ORIGIN = "https://" + HOST;
+    static final String BASE_PATH = "/" + CONTENT_NAME + "/";
+    static final String SITE = ORIGIN + BASE_PATH;
+    private static final String REPO = "echolupus802612/" + CONTENT_NAME;
     private static final String API = "https://api.github.com/repos/" + REPO;
-    private static final String SITE = "https://echolupus802612.github.io/lukang-walk/";
     private static final Pattern HASH = Pattern.compile("[0-9a-f]{40}");
 
     static final class Entry {

@@ -22,8 +22,6 @@ import java.util.List;
 
 /** 在連上遊戲前，把 1.2、1.3 版的兩本足跡接回這個 App 自己的網頁儲存空間。 */
 final class WebProgress {
-    private static final String ORIGIN = "https://echolupus802612.github.io";
-    private static final String BASE = ORIGIN + "/lukang-walk/";
     private static final String BLANK = "<!doctype html><meta charset=utf-8>"
             + "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'\">";
     private static final String COMPLETE = "nativeToWeb14";
@@ -103,7 +101,7 @@ final class WebProgress {
     // 先存下計算完成的整份結果，再逐項寫入。重試時沿用同一份結果，避免累加兩次。
     private static String migrationScript(String snapshot) {
         return "(function(n){try{"
-                + "if(location.origin!=='" + ORIGIN + "')return false;"
+                + "if(location.origin!=='" + WebRelease.ORIGIN + "')return false;"
                 + "const s=window.localStorage,p='lkwalk_',m=p+'native_to_web_14';"
                 + "const staged=s.getItem(m);if(staged==='done')return true;"
                 + "let out;if(staged!==null){out=JSON.parse(staged);}else{"
@@ -151,7 +149,7 @@ final class WebProgress {
                 settings.setJavaScriptEnabled(true);
                 view.setWebViewClient(this);
                 main.postDelayed(timeout, 10000);
-                view.loadDataWithBaseURL(BASE, BLANK, "text/html", "UTF-8", BASE);
+                view.loadDataWithBaseURL(WebRelease.SITE, BLANK, "text/html", "UTF-8", WebRelease.SITE);
             } catch (RuntimeException | LinkageError failure) { finish(false); }
         }
         @Override public boolean shouldOverrideUrlLoading(WebView web, WebResourceRequest request) {
@@ -159,7 +157,7 @@ final class WebProgress {
         }
         @Override public void onPageFinished(WebView web, String url) {
             if (done || started) return;
-            if (!BASE.equals(url)) { finish(false); return; }
+            if (!WebRelease.SITE.equals(url)) { finish(false); return; }
             started = true;
             try { web.evaluateJavascript(script, result -> finish("true".equals(result))); }
             catch (RuntimeException failure) { finish(false); }
