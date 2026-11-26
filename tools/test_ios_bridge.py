@@ -128,7 +128,8 @@ class WalkBridgeTests(unittest.TestCase):
         self.send("arrival", 18, **event)
         self.click("#snap")
         expected = {"action": "walkPhoto", "visit": {"id": visit_id, "placeID": NANTOU["id"],
-                    "name": NANTOU["name"], "date": "2025.12.31", "isSimulated": False}}
+                    "name": NANTOU["name"], "date": "2025.12.31", "isSimulated": False, "stop": 1,
+                    "walked": None, "area": f"{NANTOU['town']}・{NANTOU['city']}"}}
         self.assertEqual(self.messages("walkPhoto"), [expected, expected])
         self.assertFalse(self.page.locator("#photoAlbum").is_visible())
         self.assertTrue(self.page.evaluate("()=>lukangRenderWalkCard('','other').then(()=>false,()=>true)"))
@@ -152,6 +153,52 @@ class WalkBridgeTests(unittest.TestCase):
         self.assertTrue(green > 180 and red < 70 and blue < 70 and alpha == 255, result["pixel"])
         self.assertTrue(result["staleRejected"])
         self.assertTrue(self.page.locator("#photoAlbum").is_visible())
+
+    def test_native_capture_restores_card_only_on_a_freshly_reloaded_page(self):
+        self.enable_walk_photos()
+        session = self.start()
+        self.fix(session, ORIGIN)
+        visit_id = "ec373236-b924-42dc-ba97-57faf9a3d3c1"
+        self.send("arrival", session, placeID=PLACE["id"], date="2025.12.31", token=visit_id,
+                  seen=[PLACE["id"]], recent=[PLACE["id"]])
+        self.page.clock.fast_forward(1800)
+        self.click("#snap")
+        visit = self.messages("walkPhoto")[0]["visit"]
+        self.assertGreater(visit["walked"], 200)
+        self.assertEqual(visit["area"], "鹿港一帶・彰化縣")
+        self.page.reload(wait_until="domcontentloaded")
+        result = self.page.evaluate("""async visit=>{
+          const photo=document.createElement('canvas').toDataURL('image/jpeg').split(',')[1];
+          const render=window.renderShareCard;
+          let caption;
+          window.renderShareCard=options=>{
+            caption=[options.name,options.stop,options.line,options.place,options.date];
+            return render(options);
+          };
+          const rejected=(id,snapshot)=>lukangRenderWalkCard(photo,id,snapshot).then(()=>false,()=>true);
+          const mismatched=await rejected('another-visit',visit);
+          const incomplete=await rejected(visit.id,{...visit,walked:undefined});
+          const badStop=await rejected(visit.id,{...visit,stop:0});
+          const png=await lukangRenderWalkCard(photo,visit.id,visit);
+          const img=new Image(); img.src='data:image/png;base64,'+png; await img.decode();
+          const pending=rejected(visit.id,visit);
+          document.getElementById('go').click();
+          return {mismatched,incomplete,badStop,interrupted:await pending,
+                  header:png.slice(0,8),size:[img.width,img.height],caption};
+        }""", visit)
+        self.assertTrue(all(result[key] for key in ("mismatched", "incomplete", "badStop", "interrupted")))
+        self.assertEqual(result["size"], [1080, 1621])
+        self.assertEqual(result["header"], "iVBORw0K")
+        self.assertEqual(result["caption"], [PLACE["name"], 1, f"走了 {round(visit['walked'])} 公尺",
+                                             visit["area"], "2025.12.31"])
+        session = self.messages("start")[-1]["session"]
+        self.fix(session, ORIGIN)
+        self.click("#stop")
+        # 已經走過又回首頁，仍不得沿用捕捉相片時保留的舊資料。
+        self.assertTrue(self.page.evaluate("""v=>{
+          const photo=document.createElement('canvas').toDataURL('image/jpeg').split(',')[1];
+          return lukangRenderWalkCard(photo,v.id,v).then(()=>false,()=>true);
+        }""", visit))
 
     def test_each_simulated_arrival_has_one_new_photo_id(self):
         self.enable_walk_photos()

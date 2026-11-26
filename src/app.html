@@ -185,6 +185,7 @@ const $ = id => document.getElementById(id);
 const native = window.webkit?.messageHandlers?.lukangWalk;
 const backgroundWalk = !!native && window.lukangBackgroundWalk === true;
 const nativePhotos = !!native && window.lukangWalkPhotos === true;
+let freshWalkPage=true;
 const appValues = window.lukangInitialStore || {ver:2};
 function saveValues(values){
   if (native){
@@ -405,6 +406,7 @@ function useSim(reason){
 
 /* ---------- 流程 ---------- */
 async function go(){
+  freshWalkPage=false;
   if (S.phase==='ready' && !S.started){
     S.started = true; $('go').disabled = true; $('go').textContent='找方向中…';
     if (!S.offer) say('greet'); // 在使用者點按時先開口，iOS 才肯放聲音
@@ -447,6 +449,7 @@ function pick(){
   }
 }
 function showWalk(place,distance){
+  freshWalkPage=false;
   try{ const pre = new Audio(); pre.preload='auto'; pre.src='voice/arrived.mp3'; }catch(e){}
   if (place.ph){ const im = new Image(); im.src = `photos/${place.id}.webp`; }
   S.walked=distance===null?null:0; S.walkFrom=S.pos;
@@ -473,6 +476,7 @@ function arrive(){
   showArrival(t,seen.length,nativePhotos && S.sim ? crypto.randomUUID() : null);
 }
 function showArrival(t,count,visitID,arrivalDate){
+  freshWalkPage=false;
   const walked = S.phase==='walking' && S.target?.id===t.id && S.walked!==null
     ? Math.max(S.walked,S.startD) : null;
   S.started=false; S.phase='arrived'; S.target=t;
@@ -685,16 +689,33 @@ if (nativePhotos){
   $('photoAlbum').onclick=()=>native.postMessage({action:'photoAlbum'});
   $('snap').onclick=()=>{
     if (S.phase!=='arrived' || !$('veil').classList.contains('on') || !S.memo?.id) return;
-    const {id,placeID,name,date,isSimulated}=S.memo;
-    native.postMessage({action:'walkPhoto',visit:{id,placeID,name,date,isSimulated}});
+    const {id,placeID,name,date,isSimulated,stop,walked,area}=S.memo;
+    native.postMessage({action:'walkPhoto',visit:{id,placeID,name,date,isSimulated,stop,walked,area}});
   };
-  window.lukangRenderWalkCard=async (photoBase64,visitID)=>{
-    const memo=S.memo;
-    if (!visitID || memo?.id!==visitID || S.phase!=='arrived' || !$('veil').classList.contains('on'))
+  function canRecoverPhoto(){
+    return freshWalkPage && S.phase==='ready' && !S.started && !S.memo;
+  }
+  function validPhotoSnapshot(m,id){
+    return m && typeof id==='string' && id.length>0 && m.id===id &&
+      Number.isSafeInteger(m.placeID) && m.placeID>0 && typeof m.name==='string' && m.name.trim().length>0 &&
+      typeof m.date==='string' && /^\d{4}\.(0[1-9]|1[0-2])\.(0[1-9]|[12]\d|3[01])$/.test(m.date) &&
+      typeof m.isSimulated==='boolean' && Number.isSafeInteger(m.stop) && m.stop>0 &&
+      (m.walked===null || (Number.isFinite(m.walked) && m.walked>=0)) && typeof m.area==='string';
+  }
+  window.lukangRenderWalkCard=async (photoBase64,visitID,recoveredMemo)=>{
+    const current=S.memo;
+    let memo;
+    if (visitID && current?.id===visitID && S.phase==='arrived' && $('veil').classList.contains('on')){
+      memo=current;
+    } else if (canRecoverPhoto() && validPhotoSnapshot(recoveredMemo,visitID)){
+      // 相機開啟期間頁面可能被系統回收。只使用原生端為這次選圖保留的到站資料。
+      memo={...recoveredMemo};
+    } else {
       throw new Error('這一趟散步已經結束。');
+    }
     // 離線頁面使用原生端隨附的兩張角色圖，讓 WebKit 可以匯出畫布。
     const card=await drawPhotoCard('data:image/jpeg;base64,'+photoBase64,memo,window.lukangCardSprites);
-    if (S.memo!==memo) throw new Error('目前顯示的散步紀錄已變更。');
+    if (current ? S.memo!==current : !canRecoverPhoto()) throw new Error('目前顯示的散步紀錄已變更。');
     const png=card.toDataURL('image/png'), prefix='data:image/png;base64,';
     if (!png.startsWith(prefix)) throw new Error('透卡圖片未能產生。');
     return png.slice(prefix.length);

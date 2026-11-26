@@ -34,6 +34,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
     private var awake = false
     private var foreground = false
     private var pageReady = false
+    private var pageGeneration = 0
     private var deferredLocationError: [String: Any]?
     private var notificationSession: Int?
     private var notificationsUnavailable = false
@@ -75,6 +76,7 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
 
     private func loadGame() {
         pageReady = false
+        pageGeneration += 1
         guard let index else {
             let label = UILabel()
             label.text = "讀不到散步吧的畫面。請重新安裝 App。"
@@ -257,11 +259,22 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
               let name = fields["name"] as? String, !name.isEmpty,
               let date = fields["date"] as? String, let simulated = fields["isSimulated"] as? Bool else { return }
         let visit = WalkPhotoAlbum.Visit(id: id, placeID: placeID, name: name, date: date, isSimulated: simulated)
+        let originalPage = pageGeneration
         let capture = WalkPhotoCaptureController(place: name, save: { [weak self] photo in
             guard let self else { throw CocoaError(.userCancelled) }
+            // 相機開啟時，系統可能回收下方的網頁。只有重載後才使用按下拍照時保留的到站資料。
+            var arguments: [String: Any] = ["photo": photo.base64EncodedString(), "visitID": id, "recovered": NSNull()]
+            if self.pageGeneration != originalPage {
+                for _ in 0..<30 {
+                    if self.pageReady { break }
+                    try await Task.sleep(nanoseconds: 100_000_000)
+                }
+                guard self.pageReady else { throw CocoaError(.fileReadUnknown) }
+                arguments["recovered"] = fields
+            }
             let result = try await self.web.callAsyncJavaScript(
-                "return await window.lukangRenderWalkCard(photo, visitID);",
-                arguments: ["photo": photo.base64EncodedString(), "visitID": id], in: nil, contentWorld: .page)
+                "return await window.lukangRenderWalkCard(photo, visitID, recovered);",
+                arguments: arguments, in: nil, contentWorld: .page)
             guard let base64 = result as? String, let card = Data(base64Encoded: base64),
                   card.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) else { throw CocoaError(.fileReadCorruptFile) }
             try await self.album.save(visit: visit, photo: photo, card: card)
