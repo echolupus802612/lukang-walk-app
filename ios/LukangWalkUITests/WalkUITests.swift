@@ -22,8 +22,12 @@ final class WalkUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         let game = app.webViews.firstMatch
-        let credits = game.links["資料來源"]
-        XCTAssertTrue(credits.waitForExistence(timeout: 20))
+        // 資料來源收進底部分頁的「選單」。
+        let menuTab = game.buttons["選單"]
+        XCTAssertTrue(menuTab.waitForExistence(timeout: 20))
+        menuTab.tap()
+        let credits = game.links["資料來源與授權"]
+        XCTAssertTrue(credits.waitForExistence(timeout: 5))
         credits.tap()
 
         let navigation = app.navigationBars["資料來源與授權"]
@@ -31,6 +35,7 @@ final class WalkUITests: XCTestCase {
         XCTAssertTrue(done.waitForExistence(timeout: 10))
         XCTAssertTrue(app.links["OpenStreetMap 著作權說明"].waitForExistence(timeout: 10))
         done.tap()
+        game.buttons["散步"].tap()
         let start = game.buttons["出門散步吧"]
         XCTAssertTrue(start.waitForExistence(timeout: 10))
         XCTAssertTrue(start.isHittable)
@@ -231,7 +236,7 @@ final class WalkUITests: XCTestCase {
         add(savedCard)
         app.terminate()
         app.launch()
-        let journal = game.buttons["散步日誌"]
+        let journal = game.buttons["散步筆記"]
         XCTAssertTrue(journal.waitForExistence(timeout: 15))
         journal.tap()
         let row = app.tables["walkJournalList"].cells.matching(NSPredicate(
@@ -356,7 +361,7 @@ final class WalkUITests: XCTestCase {
 
     @MainActor
     private func openJournal(_ app: XCUIApplication) {
-        let button = app.webViews.firstMatch.buttons["散步日誌"]
+        let button = app.webViews.firstMatch.buttons["散步筆記"]
         XCTAssertTrue(button.waitForExistence(timeout: 15))
         button.tap()
         XCTAssertTrue(app.tables["walkJournalList"].waitForExistence(timeout: 8))
@@ -473,8 +478,12 @@ final class WalkUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         let game = app.webViews.firstMatch
+        // 導航設定收進底部分頁的「選單」；回程與統計在「散步」分頁。
+        let menuTab = game.buttons["選單"]
+        let walkTab = game.buttons["散步"]
         let settingsButton = game.buttons["導航設定"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 15))
+        XCTAssertTrue(menuTab.waitForExistence(timeout: 15))
+        menuTab.tap()
         settingsButton.tap()
         let settings = app.tables["walkNavigationSettings"]
         let save = settings.cells["walkSaveReturnPoint"]
@@ -497,12 +506,14 @@ final class WalkUITests: XCTestCase {
         app.terminate()
         setLocation(start)
         app.launch()
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 15))
+        XCTAssertTrue(menuTab.waitForExistence(timeout: 15))
+        menuTab.tap()
         settingsButton.tap()
         XCTAssertTrue(settings.staticTexts["已儲存回程地點"].waitForExistence(timeout: 6))
         XCTAssertEqual(toggle.value as? String, "1")
         XCTAssertTrue(settings.cells["walkArrivalRadius100"].isSelected)
         app.navigationBars["導航設定"].buttons["完成"].tap()
+        walkTab.tap()
         let stats = game.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "出發過 ")).firstMatch
         XCTAssertTrue(stats.waitForExistence(timeout: 10))
         let before = stats.label.split(separator: " ").compactMap { Int($0) }
@@ -573,7 +584,7 @@ final class WalkUITests: XCTestCase {
 
         app.terminate()
         app.launch()
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 15))
+        XCTAssertTrue(walkTab.waitForExistence(timeout: 15))
         let homeReturn = game.buttons["帶我回去"]
         homeReturn.tap()
         let stopReturn = app.buttons["walkFinishReturn"]
@@ -582,6 +593,7 @@ final class WalkUITests: XCTestCase {
         stopReturn.tap()
         XCTAssertTrue(stats.waitForExistence(timeout: 8))
         XCTAssertEqual(stats.label.split(separator: " ").compactMap { Int($0) }, [before[0] + 1, before[1]])
+        menuTab.tap()
         settingsButton.tap()
         XCTAssertTrue(toggle.waitForExistence(timeout: 6))
         XCTAssertEqual(toggle.value as? String, "0", "回程長按顯示距離的選擇應保存")
@@ -590,6 +602,7 @@ final class WalkUITests: XCTestCase {
         XCTAssertTrue(settings.staticTexts["尚未設定回程地點"].waitForExistence(timeout: 5))
         settings.cells["walkArrivalRadius0"].tap()
         app.navigationBars["導航設定"].buttons["完成"].tap()
+        walkTab.tap()
         homeReturn.tap()
         XCTAssertTrue(settings.staticTexts["尚未設定回程地點"].waitForExistence(timeout: 8))
         XCTAssertFalse(settings.cells["walkStartReturn"].exists)

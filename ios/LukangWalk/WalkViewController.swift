@@ -256,6 +256,16 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
         return url.standardizedFileURL.path == index.standardizedFileURL.path
     }
 
+    /// 頁面可請求開啟的外部網址：各社群的發文頁，以及寄給回報信箱的郵件。
+    private static func isAllowedExternal(_ url: URL) -> Bool {
+        if url.scheme == "mailto" {
+            return url.absoluteString.hasPrefix("mailto:\(WalkPlaceReportMessage.recipient)?")
+        }
+        let hosts: Set<String> = ["line.me", "www.threads.net", "x.com", "bsky.app", "www.instagram.com"]
+        guard url.scheme == "https", let host = url.host?.lowercased() else { return false }
+        return hosts.contains(host)
+    }
+
     fileprivate func receive(_ message: WKScriptMessage) {
         guard message.name == bridgeName, message.frameInfo.isMainFrame,
               isGameURL(message.frameInfo.request.url),
@@ -353,6 +363,18 @@ final class WalkViewController: UIViewController, WKNavigationDelegate {
             sheet.popoverPresentationController?.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.maxY - 80,
                                                                      width: 1, height: 1)
             present(sheet, animated: true)
+        case "openURL":
+            // 分享面板的各平台發文頁與意見回報信；只開白名單內的網址，其他一律不理。
+            guard let text = body["url"] as? String, text.count <= 1000, let url = URL(string: text),
+                  Self.isAllowedExternal(url) else { return }
+            UIApplication.shared.open(url)
+        case "copyText":
+            guard let text = body["text"] as? String, !text.isEmpty, text.count <= 200 else { return }
+            UIPasteboard.general.string = text
+        case "theme":
+            // 選單的深淺色：原生畫面跟著網頁一起換。
+            let value = body["value"] as? String
+            view.window?.overrideUserInterfaceStyle = value == "light" ? .light : value == "dark" ? .dark : .unspecified
         case "store":
             let changes: [String: Any]
             if let batch = body["values"] as? [String: Any] {

@@ -28,8 +28,16 @@ body{margin:0;background:radial-gradient(120% 70% at 50% 38%,var(--bg) 0%,var(--
   color:var(--ink);font:500 16px/1.55 "Noto Sans TC",system-ui,sans-serif;overflow-x:clip;
   -webkit-tap-highlight-color:transparent;user-select:none}
 .app{min-height:100dvh;max-width:520px;margin:0 auto;display:flex;flex-direction:column;
-  padding:max(14px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom))}
+  padding:max(14px,env(safe-area-inset-top)) 16px calc(84px + env(safe-area-inset-bottom))}
+.view{display:flex;flex-direction:column;flex:1 1 auto}
 .top{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px;color:var(--soft)}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+/* 次要功能收成右上角的圓形圖示 */
+.icons{display:flex;gap:10px;flex:none}
+.icon{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;border:0;display:grid;place-items:center}
+.icon svg,.minor svg,.tabs svg,.opts svg{fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+.icon svg{width:22px;height:22px;stroke-width:1.8}
+.icon[aria-pressed=false] .wave{display:none}
 .top b{font:700 20px/1.1 "LXGW WenKai TC",serif;color:var(--ink)}
 .mode{border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;white-space:nowrap}
 .hint{margin-top:14px;font:400 17px/1.4 "LXGW WenKai TC",serif;text-align:center;color:var(--soft);min-height:24px}
@@ -61,6 +69,54 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   background:var(--gold);color:#3a1a12;border:0;box-shadow:0 6px 0 var(--gold2)}
 .main:active{transform:translateY(3px);box-shadow:0 3px 0 var(--gold2)}
 .row{display:flex;gap:8px;margin-top:10px}.row button{flex:1}
+/* 走路中的主要操作只用文字：換個地方｜收工；次要的再小一號 */
+.acts{display:flex;justify-content:center;align-items:center;gap:18px;margin-top:14px}
+.acts button,.minor button{background:none;border:0;border-radius:10px;color:var(--ink);padding:0 10px}
+.acts button{font:400 19px/1 "LXGW WenKai TC",serif}
+.acts i{width:1px;height:18px;background:var(--line)}
+.minor{display:flex;justify-content:center;gap:18px;margin-top:4px}
+.minor button{font-size:14px;color:var(--soft);display:flex;align-items:center;gap:6px;min-height:44px}
+.minor svg{width:16px;height:16px;stroke-width:1.8}
+/* 底部分頁：散步／散步筆記／選單 */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:4;display:flex;justify-content:center;
+  padding:6px 0 max(8px,env(safe-area-inset-bottom));background:var(--bg2);border-top:1px solid rgba(251,243,230,.08)}
+.tabs button{flex:1;max-width:173px;background:none;border:0;border-radius:0;min-height:56px;color:rgba(251,243,230,.5);
+  font-size:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}
+.tabs button[aria-current=page]{color:var(--ink)}
+.tabs svg{width:26px;height:26px;stroke-width:1.7}
+/* 選單：紅磚底上的米白分組卡片 */
+.menu h2{font:700 26px "LXGW WenKai TC",serif;margin:6px 4px 14px}
+.menu .group{margin-bottom:18px}
+.menu h3{font:700 14px "LXGW WenKai TC",serif;color:var(--soft);margin:0 6px 6px;letter-spacing:1px}
+.rows{background:var(--card);color:var(--cardink);border-radius:16px;overflow:hidden}
+.mrow{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:8px 16px;background:none;border:0;border-radius:0;
+  color:var(--cardink);font:400 17px/1.3 "LXGW WenKai TC",serif;text-align:start;text-decoration:none}
+.mrow+.mrow{border-top:1px solid rgba(58,26,18,.1)}
+.mrow small{display:block;font:400 12px/1.4 "Noto Sans TC",sans-serif;color:inherit;opacity:.65;margin-top:2px}
+.mrow .v{margin-inline-start:auto;font:500 15px "Noto Sans TC",sans-serif;opacity:.8}
+.mrow .chev{margin-inline-start:auto;opacity:.45;font:400 18px system-ui}
+.mrow .v+.chev{margin-inline-start:6px}
+.switch{margin-inline-start:auto;flex:none;width:48px;height:28px;border-radius:14px;background:rgba(58,26,18,.18);position:relative}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.mrow[aria-checked=true] .switch{background:#9a3a27}
+.mrow[aria-checked=true] .switch::after{left:23px}
+/* 分享面板：米白卡片從下往上 */
+.sheetv{position:fixed;inset:0;z-index:7;background:rgba(20,6,3,.55);display:none}
+.sheetv.on{display:block}
+.sheet{position:absolute;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:var(--card);color:var(--cardink);
+  border-radius:22px 22px 0 0;padding:10px 20px max(24px,env(safe-area-inset-bottom));animation:rise .3s ease}
+.grip{width:40px;height:5px;border-radius:3px;background:currentColor;opacity:.18;margin:0 auto 14px}
+.sheet h3{font:700 19px "LXGW WenKai TC",serif;margin:0 0 10px}
+.quote{background:rgba(58,26,18,.06);border-radius:12px;padding:10px 14px;font:400 16px/1.5 "LXGW WenKai TC",serif;margin:0 0 6px}
+.opts{list-style:none;padding:0;margin:0}
+.opts li+li{border-top:1px solid rgba(58,26,18,.1)}
+.opts button{width:100%;display:flex;align-items:center;gap:14px;background:none;border:0;border-radius:0;padding:8px 2px;min-height:58px;
+  color:var(--cardink);font-size:17px;text-align:start}
+.opts .ic{width:42px;height:42px;border-radius:50%;background:rgba(58,26,18,.07);display:grid;place-items:center;color:#9a3a27;flex:none;font:700 17px system-ui}
+.opts svg{width:21px;height:21px;stroke-width:1.8}
+.opts .note{margin-inline-start:auto;font-size:13px;opacity:.6}
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:8;background:var(--cardink);color:var(--card);
+  padding:8px 16px;border-radius:999px;font-size:14px;white-space:nowrap;pointer-events:none}
 .sim{display:none;gap:8px;margin-top:10px}.sim.on{display:flex}.sim button{flex:1;font-size:15px}
 .foot{margin-top:12px;text-align:center;font-size:13px;color:var(--soft)}
 .foot a{color:var(--soft)}
@@ -68,6 +124,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 .footlinks button{min-height:44px;padding:4px 14px;font-size:14px}
 .navlinks{display:flex;justify-content:center;gap:8px;margin-top:8px}
 .navlinks button{font-size:14px}
+.card .navlinks{margin-top:0}
 .credit{display:grid;place-items:center;align-self:center;min-height:44px;padding:0 10px;text-align:center;font-size:11px;color:var(--soft);opacity:.75}
 /* 地點卡 */
 .veil{position:fixed;inset:0;background:rgba(20,6,3,.55);display:none;place-items:center;
@@ -98,7 +155,14 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 </head>
 <body>
 <div class="app">
-  <div class="top"><b>散步吧</b><span class="mode" id="mode">尚未出發</span></div>
+ <div class="view" id="walkView">
+  <div class="top">
+    <span class="brand"><b>散步吧</b><span class="mode" id="mode">尚未出發</span></span>
+    <span class="icons">
+      <button class="icon" id="voice" aria-label="小嚮導語音" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10z"/><path class="wave" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
+      <button class="icon" id="shareWalk" aria-label="分享途中" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M6 11H5v10h14V11h-1"/></svg></button>
+    </span>
+  </div>
   <div class="hint" id="hint">選一個遠近，出門散步吧</div>
 
   <div class="stage">
@@ -132,19 +196,48 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
     <button data-b="3" aria-pressed="false" hidden>2–10 公里</button><button data-b="4" aria-pressed="false" hidden>10–100 公里</button><button data-b="5" aria-pressed="false" hidden>100 公里以上</button>
   </div>
   <button class="main" id="go">出門散步吧</button>
-  <div class="row" id="walkrow" hidden><button id="redraw">換個地方</button><button id="voice">語音：開</button><button id="stop">收工</button></div>
+  <div class="acts" id="walkrow" hidden><button id="redraw">換個地方</button><i aria-hidden="true"></i><button id="stop">收工</button></div>
   <div class="sim" id="sim"><button id="stepTo">▲ 往目的地走</button><button id="stepRand">亂走</button><button id="turn">轉身 90°</button></div>
   <div class="foot" id="foot"></div>
   <div class="foot" role="status" id="notificationWarning" hidden>這趟散步沒有開啟到達通知，回到這裡仍能查看地點。</div>
   <div class="foot" role="status" id="storageWarning" hidden></div>
-  <div class="navlinks" id="navlinks" hidden><button id="returnNavigation">帶我回去</button><button id="navigationSettings">導航設定</button></div>
-  <div class="footlinks">
-    <button id="photoAlbum" hidden>相片足跡</button>
-    <button id="shareWalk" hidden>分享途中</button>
-    <button id="journalNote" hidden>記一筆</button>
-    <a id="credits" class="credit" href="https://echolupus802612.github.io/lukang-walk-app-content/credits.html" target="_blank" rel="noopener">資料來源</a>
+  <div class="minor">
+    <button id="returnNavigation" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>帶我回去</button>
+    <button id="journalNote" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>記一筆</button>
   </div>
+ </div>
+
+ <!-- 選單：設定、資料來源與回報都收在這裡，主畫面只留散步要用的 -->
+ <section class="view menu" id="menuView" aria-label="選單" hidden>
+  <h2>選單</h2>
+  <div class="group" id="walkSettings"><h3>散步</h3><div class="rows">
+    <button class="mrow" id="navigationSettings" aria-label="導航設定" hidden><span>導航設定<small>到站範圍、回程地點</small></span><span class="chev" aria-hidden="true">›</span></button>
+    <button class="mrow" id="hideDistanceRow" role="switch" aria-checked="false" hidden>隱藏剩餘距離<span class="switch" aria-hidden="true"></span></button>
+    <button class="mrow" id="voiceRow" role="switch" aria-checked="true">小嚮導語音<span class="switch" aria-hidden="true"></span></button>
+  </div></div>
+  <div class="group"><h3>外觀</h3><div class="rows">
+    <button class="mrow" id="themeRow">深淺色<span class="v" id="themeValue">跟隨手機</span><span class="chev" aria-hidden="true">›</span></button>
+  </div></div>
+  <div class="group"><h3>關於</h3><div class="rows">
+    <button class="mrow" id="feedback">問題回報・意見<span class="chev" aria-hidden="true">›</span></button>
+    <a class="mrow" id="credits" href="https://echolupus802612.github.io/lukang-walk-app-content/credits.html" target="_blank" rel="noopener">資料來源與授權<span class="chev" aria-hidden="true">›</span></a>
+  </div></div>
+ </section>
 </div>
+
+<nav class="tabs" id="tabs" aria-label="分頁">
+  <button data-view="walkView" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>散步</button>
+  <button id="photoAlbum" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5C10 5 7 4.5 3.5 5v13.5C7 18 10 18.5 12 20c2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5z"/><path d="M12 6.5V20"/></svg>散步筆記</button>
+  <button data-view="menuView"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>選單</button>
+</nav>
+
+<div class="sheetv" id="sharePanel"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+  <div class="grip" aria-hidden="true"></div>
+  <h3 id="shareTitle">分享這趟散步</h3>
+  <p class="quote" id="shareQuote"></p>
+  <ul class="opts" id="shareOpts"></ul>
+</div></div>
+<div class="toast" id="toast" role="status" hidden></div>
 
 <div class="veil" id="veil"><div class="card" role="dialog" aria-modal="true" aria-labelledby="cname">
   <div class="no" id="cno">第 1 站</div><h2 id="cname"></h2><span class="tag" id="ctag"></span>
@@ -152,7 +245,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   <p id="cdesc"></p>
   <button id="snap" class="snap">拍一張留念</button>
   <button id="visitNote" class="snap" hidden>這趟的筆記</button>
-  <div class="navlinks" id="cardNavlinks" hidden><button id="cardReturnNavigation" class="snap">帶我回去</button><button id="cardNavigationSettings" class="snap">導航設定</button></div>
+  <div class="navlinks" id="cardNavlinks" hidden><button id="cardReturnNavigation" class="snap">帶我回去</button></div>
   <button id="again">再走一趟</button>
   <button id="reportPlace" class="report" hidden>回報地點問題</button>
 </div></div>
@@ -688,7 +781,6 @@ function showWalk(place,distance){
   S.pickAt=Date.now(); S.lastFarAt=S.pickAt; S.hits=0;
   $('hint').textContent = '這次要去：' + (HINT[place.cat]||HINT.other);
   $('bands').hidden = true; $('go').hidden = true; $('walkrow').hidden = false;
-  $('photoAlbum').hidden=true;
   $('journalNote').hidden=!nativeJournal || !tripID; $('shareWalk').hidden=false;
   $('distanceHint').hidden=!navigation; $('dist').classList.toggle('pressable',navigation);
   $('go').disabled=false; $('redraw').disabled=!S.pos;
@@ -726,7 +818,6 @@ function showArrival(t,count,visitID,arrivalDate){
   clearInterval(simT); simT=null;
   $('distanceHint').hidden=true; $('dist').classList.remove('pressable');
   $('walkrow').hidden=true; $('sim').classList.remove('on');
-  $('photoAlbum').hidden=true;
   $('journalNote').hidden=true; $('shareWalk').hidden=true; $('visitNote').hidden=!nativeJournal || !visitID;
   $('reportPlace').hidden=!(nativePlaceReporting && !S.sim && visitID && visitID===presentingToken);
   $('go').disabled=false;
@@ -941,9 +1032,14 @@ function selectBand(band){
 }
 document.querySelectorAll('#bands button').forEach(b=>b.onclick=()=>selectBand(+b.dataset.b));
 if (navigation){
-  $('navlinks').hidden=false; $('cardNavlinks').hidden=false; $('bands').classList.add('long');
+  $('returnNavigation').hidden=false; $('navigationSettings').hidden=false; $('hideDistanceRow').hidden=false;
+  $('cardNavlinks').hidden=false; $('bands').classList.add('long');
   document.querySelectorAll('#bands button[hidden]').forEach(b=>b.hidden=false);
-  $('navigationSettings').onclick=$('cardNavigationSettings').onclick=()=>native.postMessage({action:'navigationSettings'});
+  $('navigationSettings').onclick=()=>native.postMessage({action:'navigationSettings'});
+  $('hideDistanceRow').onclick=()=>{
+    const hidden=!navPrefs.hideDistance;
+    applyPreferences({hideDistance:hidden}); native.postMessage({action:'setHideDistance',hidden});
+  };
   $('returnNavigation').onclick=$('cardReturnNavigation').onclick=()=>{
     const message={action:'returnNavigation'};
     if (currentSession!==null) message.session=currentSession;
@@ -953,6 +1049,7 @@ if (navigation){
   function applyPreferences(p){
     if (typeof p.hideDistance==='boolean') navPrefs.hideDistance=p.hideDistance;
     if (typeof p.hasReturnPoint==='boolean') navPrefs.hasReturnPoint=p.hasReturnPoint;
+    $('hideDistanceRow').setAttribute('aria-checked',String(navPrefs.hideDistance));
     if ([0,25,50,100].includes(p.arrivalRadius) && p.arrivalRadius!==navPrefs.arrivalRadius){
       navPrefs.arrivalRadius=p.arrivalRadius; S.hits=0; S.hitFix=S.fixAt;
     }
@@ -1007,15 +1104,48 @@ function walkShareText(){
   if (!navPrefs.hideDistance && S.pos && S.target){ const [n,u] = fmt(dist(S.pos,[S.target.lat,S.target.lng])); left = `，還有 ${n} ${u}`; }
   return `小嚮導要帶我去一個還不知道的地方${left} #散步吧`;
 }
-$('shareWalk').onclick = async ()=>{
+/* 分享面板：各平台的發文連結，按下去直接開該平台的發文頁，文字已填好（只能帶文字，帶不了圖） */
+const SHARE_TO = [
+  {id:'line', name:'LINE', url:t=>`https://line.me/R/share?text=${encodeURIComponent(t)}`,
+   icon:'<svg viewBox="0 0 24 24"><path d="M12 4C7 4 3 7.2 3 11.2c0 3.6 3.2 6.6 7.5 7.1l.7 2.2 2.6-2.3c4.2-.6 7.2-3.6 7.2-7C21 7.2 17 4 12 4z"/><path d="M7.5 9.5v3.5h2M11.5 9.5V13M14 13V9.5l2.5 3.5V9.5"/></svg>'},
+  {id:'instagram', name:'Instagram', note:'先複製文字', copy:true, url:()=>'https://www.instagram.com/',
+   icon:'<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.6"/><circle cx="16.8" cy="7.2" r=".6"/></svg>'},
+  {id:'threads', name:'Threads', url:t=>`https://www.threads.net/intent/post?text=${encodeURIComponent(t)}`, icon:'@'},
+  {id:'x', name:'X', url:t=>`https://x.com/intent/tweet?text=${encodeURIComponent(t)}`, icon:'X'},
+  {id:'bluesky', name:'Bluesky', url:t=>`https://bsky.app/intent/compose?text=${encodeURIComponent(t)}`,
+   icon:'<svg viewBox="0 0 24 24"><path d="M12 11C10 7 7 5 5 5s-2 3 0 6 5 2 7 0zm0 0c2-4 5-6 7-6s2 3 0 6-5 2-7 0zm0 0c-1 3-3 6-5 7m5-7c1 3 3 6 5 7"/></svg>'},
+  {id:'copy', name:'複製文字', copy:true,
+   icon:'<svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></svg>'},
+  {id:'more', name:'其他 App…', system:true,
+   icon:'<svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="18" cy="12" r="1"/></svg>'}
+];
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>{ t.hidden=true; },2200); }
+async function copyText(text){
+  if (native){ native.postMessage({action:'copyText',text}); return true; }
+  try{ await navigator.clipboard.writeText(text); return true; }catch(e){ return false; }
+}
+function openShare(url){ if (native) native.postMessage({action:'openURL',url}); else window.open(url,'_blank','noopener,noreferrer'); }
+$('shareOpts').innerHTML = SHARE_TO.filter(x=>!x.system || native || navigator.share).map(x=>
+  `<li><button data-to="${x.id}"><span class="ic" aria-hidden="true">${x.icon}</span>${x.name}${x.note?`<span class="note">${x.note}</span>`:''}</button></li>`).join('');
+function closeShare(){ $('sharePanel').classList.remove('on'); $('shareWalk').focus(); }
+$('shareOpts').onclick = async e=>{
+  const b = e.target.closest('button'); if (!b) return;
+  const to = SHARE_TO.find(x=>x.id===b.dataset.to), text = $('shareQuote').textContent;
+  closeShare();
+  if (to.system){
+    if (native) native.postMessage({action:'shareText',text});
+    else { try{ await navigator.share({text}); }catch(err){} }
+    return;
+  }
+  if (to.copy) toast(await copyText(text) ? (to.id==='instagram' ? '已複製，貼到 IG 的說明欄' : '已複製') : '無法複製');
+  if (to.url) openShare(to.url(text));
+};
+$('sharePanel').onclick = e=>{ if (e.target===$('sharePanel')) closeShare(); };
+addEventListener('keydown', e=>{ if (e.key==='Escape' && $('sharePanel').classList.contains('on')) closeShare(); });
+$('shareWalk').onclick = ()=>{
   if (S.phase !== 'walking') return;
-  const text = walkShareText();
-  if (native){ native.postMessage({action:'shareText', text}); return; }
-  if (navigator.share){ try{ await navigator.share({text}); }catch(e){} return; }
-  const b = $('shareWalk');
-  try{ await navigator.clipboard.writeText(text); b.textContent = '已複製'; }
-  catch(e){ b.textContent = '無法複製'; }
-  setTimeout(()=>{ b.textContent = '分享途中'; }, 2000);
+  $('shareQuote').textContent = walkShareText();
+  $('sharePanel').classList.add('on'); $('shareOpts').querySelector('button').focus();
 };
 if (nativePlaceReporting){
   $('reportPlace').onclick=()=>{
@@ -1043,7 +1173,7 @@ function cardBase64(card){
 let shareFile = null, shareUrl = '';
 function shareMsg(text){ $('shareMsg').textContent = text; }
 if (nativeJournal){
-  $('photoAlbum').hidden=false; $('photoAlbum').textContent='散步日誌';
+  $('photoAlbum').hidden=false;
   $('photoAlbum').onclick=()=>native.postMessage({action:'journal'});
   $('journalNote').onclick=()=>{
     if (S.phase==='walking' && tripID) native.postMessage({action:'journal',id:tripID});
@@ -1142,9 +1272,34 @@ $('shareGo').onclick = async ()=>{
   document.body.append(a); a.click(); a.remove();
   shareMsg('已存成圖片，可以到相簿或下載資料夾找它。');
 };
-$('voice').textContent = '語音：'+(S.voice?'開':'關');
-$('voice').onclick = ()=>{ S.voice=!S.voice; store.set('voice',S.voice); $('voice').textContent='語音：'+(S.voice?'開':'關');
+function showVoice(){
+  $('voice').setAttribute('aria-pressed',String(S.voice)); $('voiceRow').setAttribute('aria-checked',String(S.voice));
+}
+showVoice();
+$('voice').onclick = $('voiceRow').onclick = ()=>{ S.voice=!S.voice; store.set('voice',S.voice); showVoice();
   if(!S.voice){ try{speechSynthesis.cancel()}catch(e){} voiceEl.pause(); } };
+
+/* ---------- 底部分頁與選單 ---------- */
+function showView(id){
+  for (const v of ['walkView','menuView']) $(v).hidden = v!==id;
+  document.querySelectorAll('#tabs [data-view]').forEach(b=>b.dataset.view===id ? b.setAttribute('aria-current','page') : b.removeAttribute('aria-current'));
+  scrollTo(0,0);
+}
+document.querySelectorAll('#tabs [data-view]').forEach(b=>b.onclick=()=>showView(b.dataset.view));
+const THEMES = [['','跟隨手機'],['light','淺色'],['dark','深色']];
+function applyTheme(t){
+  const [value,label] = THEMES.find(x=>x[0]===t) || THEMES[0];
+  if (value) document.documentElement.dataset.theme=value; else delete document.documentElement.dataset.theme;
+  $('themeValue').textContent=label;
+  if (native) native.postMessage({action:'theme',value});
+}
+applyTheme(store.get('theme',''));
+$('themeRow').onclick = ()=>{
+  const i = THEMES.findIndex(x=>x[0]===(document.documentElement.dataset.theme||''));
+  const next = THEMES[(i+1)%THEMES.length][0]; store.set('theme',next); applyTheme(next);
+};
+const FEEDBACK = 'mailto:echolupus802612@gmail.com?subject='+encodeURIComponent('散步吧意見回報');
+$('feedback').onclick = ()=>{ if (native) native.postMessage({action:'openURL',url:FEEDBACK}); else location.href=FEEDBACK; };
 document.addEventListener('visibilitychange', ()=>{
   if (document.hidden){
     if (nativeJournal && tripID && !S.sim) previousLegs=null;
